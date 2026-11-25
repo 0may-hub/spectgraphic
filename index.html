@@ -161,6 +161,48 @@
     #panel { border-left: none; border-top: 1px solid var(--line); padding: 14px 16px 40px; }
     #steps li:not(.on) { display: none; }
   }
+  /* ---------- 投稿 ---------- */
+  #postAsk { display: none; }
+  #done.asking .btns { display: none; }
+  #done.asking #postAsk { display: block; }
+  #postAsk p { font-size: 13px; line-height: 1.8; margin: 0 0 12px; letter-spacing: .04em; }
+  #postAsk p small { display: block; opacity: .65; font-size: 11.5px; }
+  #postAsk .btns2 { display: grid; grid-template-columns: 1.4fr 1fr; gap: 8px; }
+  #postAsk .btns2 button { padding: 12px 8px; font-size: 14px; }
+  #done .note.err { color: #ffc9b8; opacity: 1; }
+  .linkbtn { background: none; border: 0; color: var(--ink); opacity: .75; font-size: 13px; letter-spacing: .08em; margin-top: 16px; text-decoration: underline; text-underline-offset: 4px; }
+  /* ---------- ギャラリー ---------- */
+  #gallery { position: fixed; inset: 0; z-index: 30; background: var(--bg); overflow-y: auto; display: none; -webkit-overflow-scrolling: touch; }
+  #gallery.show { display: block; }
+  #gallery .gh { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 12px; padding: 14px 20px; background: rgba(5,7,15,.92);
+                 -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
+  #gallery .gh b { font-size: 15px; letter-spacing: .2em; font-weight: 600; }
+  #gallery .gh small { opacity: .6; font-size: 12px; letter-spacing: .06em; }
+  #gallery .gh .sp { flex: 1; }
+  #gallery .gh .adm { font-size: 11px; color: var(--navy); background: #ffd66b; border-radius: 999px; padding: 3px 9px; letter-spacing: .06em; }
+  #gClose { width: 38px; height: 38px; border-radius: 50%; border: 1px solid var(--line); background: none; font-size: 18px; line-height: 1; }
+  #gGrid { columns: 4 220px; column-gap: 12px; padding: 16px 20px 8px; }
+  .gi { break-inside: avoid; margin: 0 0 12px; display: block; width: 100%; padding: 0; border: 0; background: #0e1326; border-radius: 10px; overflow: hidden; text-align: left; }
+  .gi img { display: block; width: 100%; height: auto; background: #0b0f1e; }
+  .gi span { display: block; padding: 7px 10px 8px; font-size: 12px; letter-spacing: .04em; opacity: .85; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #gMsg { text-align: center; padding: 30px 20px 10px; font-size: 13px; opacity: .7; line-height: 1.9; letter-spacing: .05em; }
+  #gMore { display: block; margin: 6px auto 40px; }
+  #gMore[hidden] { display: none; }
+  #gView { position: fixed; inset: 0; z-index: 40; background: rgba(3,5,12,.94); display: none; flex-direction: column; align-items: center; justify-content: center; padding: 20px; gap: 14px; }
+  #gView.show { display: flex; }
+  #gView img { max-width: 100%; max-height: calc(100vh - 170px); border-radius: 8px; display: block; background: #0b0f1e; }
+  #gView .cap { text-align: center; font-size: 14px; letter-spacing: .06em; line-height: 1.6; }
+  #gView .cap small { display: block; opacity: .55; font-size: 11.5px; }
+  #gView .row { display: flex; gap: 10px; }
+  #gDel { border-color: #ff9a8a; color: #ffc9b8; }
+  #gAdmin { display: none; padding: 0 20px 12px; gap: 8px; align-items: center; font-size: 12px; }
+  #gallery.askadmin #gAdmin { display: flex; }
+  #gAdmin input { flex: 1; max-width: 260px; background: #0e1326; border: 1px solid var(--line); color: var(--ink); border-radius: 8px; padding: 8px 10px; font: inherit; }
+  @media (max-width: 600px) {
+    #gGrid { columns: 2 140px; column-gap: 8px; padding: 12px 12px 6px; }
+    .gi { margin-bottom: 8px; }
+    #gallery .gh { padding: 12px 14px; }
+  }
 </style>
 </head>
 <body class="intro">
@@ -198,7 +240,8 @@
       <h1>AUDIO SPECTGRAPHIC</h1>
       <h2>音からビジュアルをつくる</h2>
       <p>音を鳴らすと、低い音から高い音までの大きさ（スペクトラム）がリアルタイムに動きます。<br>好きな瞬間をキャプチャして重ね、色やかたちを組み合わせて、1枚のビジュアルにします。</p>
-      <button class="primary big" id="startBtn">はじめる</button>
+      <button class="primary big" id="startBtn">はじめる</button><br>
+      <button class="linkbtn" id="galFromStart" hidden>みんなの作品を見る</button>
     </div>
   </div>
   <input type="file" id="file" accept="audio/*" hidden>
@@ -252,8 +295,24 @@
       <button class="ghost" id="dPost">投稿</button>
       <button class="ghost" id="dBack">戻る</button>
     </div>
+    <div id="postAsk">
+      <p>この作品を「みんなの作品」ギャラリーに公開しますか？<small id="postTitle"></small><small>公開した作品は、会場やほかの人のスマホからも見られます</small></p>
+      <div class="btns2"><button class="primary" id="pYes">公開する</button><button class="ghost" id="pNo">やめる</button></div>
+    </div>
     <p class="note" id="dNote"></p>
   </div>
+</div>
+<div id="gallery">
+  <div class="gh"><b>みんなの作品</b><small id="gCount"></small><span class="sp"></span><span class="adm" id="gAdmBadge" hidden>管理モード</span><button id="gClose" aria-label="閉じる">×</button></div>
+  <div id="gAdmin"><span>管理者パスワード</span><input id="gAdmKey" type="password" autocomplete="off"><button class="ghost" id="gAdmOk">入る</button></div>
+  <div id="gGrid"></div>
+  <p id="gMsg"></p>
+  <button class="ghost" id="gMore" hidden>もっと見る</button>
+</div>
+<div id="gView">
+  <img id="gvImg" alt="">
+  <div class="cap"><span id="gvTitle"></span><small id="gvDate"></small></div>
+  <div class="row"><button class="ghost" id="gvClose">閉じる</button><button class="ghost" id="gDel" hidden>この投稿を消す</button></div>
 </div>
 <div id="toast"></div>
 
@@ -1169,7 +1228,8 @@ function fileName() {
 async function openDone() {
   commit(); setStep(3);
   $('dNote').textContent = '画像をつくっています…'; $('donePv').removeAttribute('src'); $('done').classList.add('show');
-  $('dSave').disabled = true;
+  $('dSave').disabled = true; $('done').classList.remove('asking'); $('dNote').classList.remove('err');
+  $('dPost').textContent = '投稿';
   try {
     doneBlob = await exportPNG(2); doneName = fileName();
     if (doneURL) URL.revokeObjectURL(doneURL); doneURL = URL.createObjectURL(doneBlob);
@@ -1178,7 +1238,160 @@ async function openDone() {
 }
 $('save').addEventListener('click', openDone);
 $('dBack').addEventListener('click', () => { $('done').classList.remove('show'); setStep(2); });
-$('dPost').addEventListener('click', () => { $('dNote').textContent = '投稿は展示の会期中に使えるようになります'; });
+// ---------- 投稿・ギャラリー（Supabase） ----------
+const SB_URL = 'https://jbcjokohlqlcbhtyxlaq.supabase.co';
+const SB_KEY = 'sb_publishable_9L3GzA-k2jnncFgGC3Tplw_Tf_1xDVQ';   // 公開用のキー（読み取りだけ。書き込みは post 関数が確認してから行う）
+const POST_FN = SB_URL + '/functions/v1/post';
+const GAL = { openAt: null, closeAt: null, items: [], total: 0, loading: false, admin: '', postedBlob: null };
+const md = d => `${d.getMonth() + 1}/${d.getDate()}`;
+function periodText() { return GAL.openAt ? `${md(GAL.openAt)}〜${md(new Date(GAL.closeAt - 1))}` : '展示の会期中'; }
+function postState() {
+  if (!GAL.openAt) return 'unknown';
+  const now = Date.now();
+  return now < GAL.openAt ? 'before' : now >= GAL.closeAt ? 'after' : 'open';
+}
+async function loadSettings() {
+  try {
+    const r = await fetch(`${SB_URL}/rest/v1/settings?select=open_at,close_at`, { headers: { apikey: SB_KEY } });
+    const [st] = await r.json();
+    GAL.openAt = Date.parse(st.open_at); GAL.closeAt = Date.parse(st.close_at);
+  } catch (e) { /* つながらないときは投稿時にサーバーが判断する */ }
+  $('galFromStart').hidden = !(postState() === 'open' || postState() === 'after' || location.hash === '#admin');
+}
+loadSettings();
+
+function setNote(t, err) { const n = $('dNote'); n.textContent = t; n.classList.toggle('err', !!err); }
+$('dPost').addEventListener('click', () => {
+  if (!doneBlob) return;
+  if (GAL.postedBlob === doneBlob) { openGallery(); return; }   // 投稿ずみなら見に行く
+  const st = postState();
+  if (st === 'before') { setNote(`投稿は会期中（${periodText()}）にできます`); return; }
+  if (st === 'after') { setNote('投稿の受付は終了しました'); return; }
+  $('postTitle').textContent = S.name ? `タイトル：${S.name}` : 'タイトル：なし（つくる画面の「タイトル」で付けられます）';
+  setNote(''); $('done').classList.add('asking');
+});
+$('pNo').addEventListener('click', () => { $('done').classList.remove('asking'); setNote(''); });
+
+async function makePostImages() {   // 拡大用（長辺1200px）と一覧用（長辺480px）に縮めて圧縮
+  const img = new Image(); img.src = doneURL; await img.decode();
+  const draw = (src, sw, sh, long) => {
+    const k = Math.min(1, long / Math.max(sw, sh)), c = document.createElement('canvas');
+    c.width = Math.round(sw * k); c.height = Math.round(sh * k);
+    const g = c.getContext('2d'); g.imageSmoothingQuality = 'high'; g.drawImage(src, 0, 0, c.width, c.height); return c;
+  };
+  const enc = async (c, max) => {
+    for (const q of [0.76, 0.66, 0.56, 0.46]) {
+      let b = await new Promise(r => c.toBlob(r, 'image/webp', q));
+      if (!b || b.type !== 'image/webp') b = await new Promise(r => c.toBlob(r, 'image/jpeg', q + 0.08));   // WebPを作れないブラウザ（Safariなど）はJPEG
+      if (b && b.size <= max) return b;
+    }
+    throw new Error('too_large');
+  };
+  const cf = draw(img, img.naturalWidth, img.naturalHeight, 1200), ct = draw(cf, cf.width, cf.height, 480);
+  return { full: await enc(cf, 600000), thumb: await enc(ct, 140000), w: cf.width, h: cf.height };
+}
+$('pYes').addEventListener('click', async () => {
+  const blob = doneBlob;
+  $('pYes').disabled = $('pNo').disabled = true; setNote('送信しています…');
+  try {
+    const im = await makePostImages();
+    const fd = new FormData();
+    fd.append('title', S.name || ''); fd.append('w', im.w); fd.append('h', im.h);
+    const ext = im.full.type === 'image/webp' ? 'webp' : 'jpg';
+    fd.append('full', im.full, 'full.' + ext); fd.append('thumb', im.thumb, 'thumb.' + ext);
+    const r = await fetch(POST_FN, { method: 'POST', headers: { apikey: SB_KEY }, body: fd });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.ok) throw Object.assign(new Error('post'), { msg: j.message });
+    GAL.postedBlob = blob; GAL.items = []; GAL.total = 0;
+    $('done').classList.remove('asking'); $('dPost').textContent = 'ギャラリー';
+    setNote('投稿しました！「ギャラリー」からみんなの作品が見られます');
+  } catch (e) {
+    setNote(e.msg || '送信できませんでした。電波のよいところでもう一度お試しください', true);
+  } finally { $('pYes').disabled = $('pNo').disabled = false; }
+});
+
+// ---------- ギャラリー ----------
+const PAGE = 24;
+const imgURL = (p, thumb) => `${SB_URL}/storage/v1/object/public/posts/${p.id}${thumb ? '_t' : ''}.${p.ext}`;
+function fmtDate(iso) { const d = new Date(iso), p = v => String(v).padStart(2, '0'); return `${md(d)} ${p(d.getHours())}:${p(d.getMinutes())}`; }
+function tile(p) {
+  const b = document.createElement('button'); b.className = 'gi';
+  const im = document.createElement('img'); im.loading = 'lazy'; im.decoding = 'async'; im.alt = p.title || '作品';
+  im.width = 480; im.height = Math.round(480 * p.h / p.w); im.src = imgURL(p, true);
+  b.appendChild(im);
+  if (p.title) { const t = document.createElement('span'); t.textContent = p.title; b.appendChild(t); }
+  b.addEventListener('click', () => openView(p));
+  return b;
+}
+async function loadMore(reset) {
+  if (GAL.loading) return; GAL.loading = true;
+  if (reset) { GAL.items = []; $('gGrid').innerHTML = ''; }
+  $('gMore').hidden = true; $('gMsg').textContent = '読み込んでいます…';
+  try {
+    const r = await fetch(`${SB_URL}/rest/v1/posts?select=id,created_at,title,ext,w,h&order=created_at.desc&limit=${PAGE}&offset=${GAL.items.length}`,
+      { headers: { apikey: SB_KEY, Prefer: 'count=exact' } });
+    if (!r.ok) throw new Error('load');
+    const rows = await r.json();
+    GAL.total = +((r.headers.get('content-range') || '').split('/')[1]) || GAL.items.length + rows.length;
+    const frag = document.createDocumentFragment(); rows.forEach(p => frag.appendChild(tile(p)));
+    $('gGrid').appendChild(frag); GAL.items.push(...rows);
+    $('gCount').textContent = GAL.total ? `${GAL.total}件` : '';
+    $('gMsg').textContent = GAL.items.length ? '' : (postState() === 'before' ? `ギャラリーは ${periodText()} の会期中に公開されます` : 'まだ投稿はありません。最初の1枚をどうぞ');
+    $('gMore').hidden = GAL.items.length >= GAL.total;
+  } catch (e) { $('gMsg').textContent = '読み込めませんでした。電波のよいところでもう一度開いてください'; }
+  GAL.loading = false;
+}
+function openGallery() {
+  $('done').classList.remove('show', 'asking');
+  $('gallery').classList.add('show'); $('gallery').scrollTop = 0;
+  loadMore(true);
+}
+function closeGallery() {
+  $('gallery').classList.remove('show');
+  if (location.hash === '#gallery') history.replaceState(null, '', location.pathname + location.search);
+}
+$('galFromStart').addEventListener('click', openGallery);
+$('gClose').addEventListener('click', closeGallery);
+$('gMore').addEventListener('click', () => loadMore(false));
+let viewing = null;
+function openView(p) {
+  viewing = p; $('gvImg').src = imgURL(p, true); $('gvImg').alt = p.title || '作品';
+  const full = new Image(); full.onload = () => { if (viewing === p) $('gvImg').src = full.src; }; full.src = imgURL(p, false);   // 先に小さい画像、届いたら大きい画像
+  $('gvTitle').textContent = p.title || '無題'; $('gvDate').textContent = fmtDate(p.created_at);
+  $('gDel').hidden = !GAL.admin; $('gDel').textContent = 'この投稿を消す'; $('gDel').dataset.armed = '';
+  $('gView').classList.add('show');
+}
+$('gvClose').addEventListener('click', () => { $('gView').classList.remove('show'); viewing = null; });
+$('gView').addEventListener('click', e => { if (e.target.id === 'gView') { $('gView').classList.remove('show'); viewing = null; } });
+
+// 管理モード（URLの最後に #admin を付けて開く）
+async function adminCall(body) {
+  const r = await fetch(POST_FN, { method: 'POST', headers: { apikey: SB_KEY, 'Content-Type': 'application/json', 'x-admin-key': GAL.admin }, body: JSON.stringify(body) });
+  return r.json().catch(() => ({}));
+}
+async function tryAdmin(key) {
+  GAL.admin = key; const j = await adminCall({ action: 'check-admin' });
+  if (!j.ok) { GAL.admin = ''; return false; }
+  try { localStorage.setItem('sg_admin', key); } catch (e) {}
+  $('gAdmBadge').hidden = false; $('gallery').classList.remove('askadmin'); return true;
+}
+$('gAdmOk').addEventListener('click', async () => { if (!(await tryAdmin($('gAdmKey').value))) toast('パスワードが違います'); });
+$('gDel').addEventListener('click', async () => {
+  const b = $('gDel');
+  if (!b.dataset.armed) { b.dataset.armed = '1'; b.textContent = 'もう一度押すと消えます'; return; }
+  b.disabled = true;
+  const j = await adminCall({ action: 'remove', id: viewing.id });
+  b.disabled = false;
+  if (!j.ok) { toast(j.message || '消せませんでした'); return; }
+  $('gView').classList.remove('show'); viewing = null; toast('消しました'); loadMore(true);
+});
+(async () => {
+  if (location.hash === '#admin') {
+    let k = ''; try { k = localStorage.getItem('sg_admin') || ''; } catch (e) {}
+    $('gallery').classList.add('show'); loadMore(true);
+    if (!(k && await tryAdmin(k))) $('gallery').classList.add('askadmin');
+  } else if (location.hash === '#gallery') openGallery();
+})();
 $('dSave').addEventListener('click', async () => {
   if (!doneBlob) return;
   const dl = await dlP;
