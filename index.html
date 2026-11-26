@@ -3,14 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>AUDIO SPECTGRAPHIC — 音からビジュアルをつくる</title>
+<title>AudioSpectGraphic — 音からビジュアルをつくる</title>
 <style>
   :root { --ink: #ece6dd; --bg: #05070f; --line: rgba(255,255,255,.14); --paper: #f4f1ec; --navy: #0b1430; --acc: #ff5fd2; }
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); font-family: "Hiragino Sans", "Yu Gothic", system-ui, sans-serif; overflow: hidden; }
   button { font: inherit; cursor: pointer; color: inherit; }
   header { position: fixed; top: 0; left: 0; right: 0; height: 56px; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; z-index: 5; pointer-events: none; }
-  .brand b { font-size: 14px; letter-spacing: .24em; font-weight: 600; display: block; }
+  .brand b { font-size: 15px; letter-spacing: .06em; font-weight: 600; display: block; }
   .brand span { font-size: 11px; letter-spacing: .14em; opacity: .7; }
   #steps { display: flex; gap: 6px; list-style: none; margin: 0; padding: 0; font-size: 11px; letter-spacing: .08em; }
   #steps li { padding: 5px 10px; border-radius: 999px; border: 1px solid var(--line); opacity: .5; }
@@ -44,7 +44,7 @@
   #flash { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; }
   #startOverlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(3,5,12,.55); z-index: 3; }
   #startOverlay .box { text-align: center; padding: 0 20px; }
-  #startOverlay h1 { font-size: 22px; letter-spacing: .3em; font-weight: 600; margin: 0 0 6px; }
+  #startOverlay h1 { font-size: 28px; letter-spacing: .06em; font-weight: 600; margin: 0 0 6px; }
   #startOverlay h2 { font-size: 13px; letter-spacing: .2em; font-weight: 400; margin: 0 0 18px; opacity: .8; }
   body.intro #liveCtl, body.intro #liveInfo { visibility: hidden; }   /* はじめる前は説明とボタンだけ */
   #startOverlay .big { font-size: 16px; padding: 14px 44px; letter-spacing: .2em; }
@@ -144,9 +144,9 @@
     #liveCtl { bottom: 12px; gap: 9px; }
     #srcRow { gap: 6px; }
     #srcRow .chip { padding: 6px 12px; }
-    #startOverlay h1 { font-size: 18px; letter-spacing: .22em; }
+    #startOverlay h1 { font-size: 24px; letter-spacing: .04em; }
     header { padding: 0 14px; }
-    .brand b { font-size: 12px; letter-spacing: .16em; }
+    .brand b { font-size: 13px; letter-spacing: .04em; }
     .brand span { font-size: 10px; }
     #steps li { white-space: nowrap; font-size: 10.5px; padding: 4px 9px; }
     .sep { flex-basis: 100%; height: 0; margin: 0; background: none; }   /* 自分の声・ファイルは2段目に */
@@ -207,7 +207,7 @@
 </head>
 <body class="intro">
 <header>
-  <div class="brand"><b>AUDIO SPECTGRAPHIC</b><span>音からビジュアルをつくる</span></div>
+  <div class="brand"><b>AudioSpectGraphic</b><span>音からビジュアルをつくる</span></div>
   <ol id="steps"><li class="on">1 音をあつめる</li><li>2 つくる</li><li>3 完成</li></ol>
 </header>
 
@@ -237,7 +237,7 @@
   </div>
   <div id="startOverlay">
     <div class="box">
-      <h1>AUDIO SPECTGRAPHIC</h1>
+      <h1>AudioSpectGraphic</h1>
       <h2>音からビジュアルをつくる</h2>
       <p>音を鳴らすと、低い音から高い音までの大きさ（スペクトラム）がリアルタイムに動きます。<br>好きな瞬間をキャプチャして重ね、色やかたちを組み合わせて、1枚のビジュアルにします。</p>
       <button class="primary big" id="startBtn">はじめる</button><br>
@@ -318,7 +318,7 @@
 
 <script>
 // =====================================================
-//  AUDIO SPECTGRAPHIC（音からビジュアルをつくる）
+//  AudioSpectGraphic（音からビジュアルをつくる）
 //  1. 音のスペクトラムがリアルタイムに動く。好きな瞬間をキャプチャ（最大5つ）
 //  2. キャプチャを重ねて、色・かたち・バー・背景・エフェクトを組み合わせる
 //     「ランダム」で色やエフェクトを配置しなおせる
@@ -1222,7 +1222,7 @@ async function exportPNG(scale) {   // SVGを高解像度のPNGにする
 }
 function fileName() {
   const d = new Date(), p = v => String(v).padStart(2, '0');
-  const nm = (S.name || 'spectgraphic').replace(/[\\/:*?"<>|]+/g, '').trim().slice(0, 40) || 'spectgraphic';
+  const nm = (S.name || 'AudioSpectGraphic').replace(/[\\/:*?"<>|]+/g, '').trim().slice(0, 40) || 'AudioSpectGraphic';
   return `${nm}_${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}.png`;
 }
 async function openDone() {

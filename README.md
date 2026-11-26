@@ -1,4 +1,4 @@
-# AUDIO SPECTGRAPHIC
+# AudioSpectGraphic
 
 音からビジュアルをつくるツール（Mon Takanawa サウンドビジュアル展 出展作品）
 

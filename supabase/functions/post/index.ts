@@ -1,4 +1,4 @@
-// AUDIO SPECTGRAPHIC — 投稿の受付
+// AudioSpectGraphic — 投稿の受付
 //   POST multipart/form-data { title, w, h, full, thumb }  → 投稿
 //   POST application/json { action: "remove", id } + x-admin-key → 非表示にして画像を消す（管理者のみ）
 //   POST application/json { action: "purge" } → 非表示にした投稿の画像を片付ける（誰が呼んでも安全）
