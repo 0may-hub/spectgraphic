@@ -71,7 +71,13 @@
   #startOverlay h2 { font-size: 13px; letter-spacing: .2em; font-weight: 400; margin: 0 0 18px; opacity: .8; }
   #startOverlay p { font-size: 13px; line-height: 1.95; opacity: .88; margin: 0 0 24px; letter-spacing: .05em; }
   #startOverlay p small { display: block; opacity: .7; font-size: 11.5px; margin-top: 6px; }
-  #startBtn { font-size: 16px; padding: 14px 44px; letter-spacing: .2em; }
+  .picks { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+  .songPick { background: var(--paper); color: var(--navy); border: none; border-radius: 16px; padding: 14px 26px; min-width: 150px; box-shadow: 0 6px 24px rgba(0,0,0,.3); }
+  .songPick b { display: block; font-size: 17px; letter-spacing: .2em; font-weight: 600; }
+  .songPick small { display: block; font-size: 10.5px; letter-spacing: .08em; opacity: .65; margin-top: 3px; }
+  .songPick[data-song="hoshi"] { background: linear-gradient(160deg, #1a2350, #0b1030); color: var(--ink); border: 1px solid rgba(255,255,255,.35); }
+  #songBtn { display: none; }
+  body.playing #songBtn { display: inline-block; visibility: visible; }
   #loadMsg { font-size: 12px; opacity: .7; margin-top: 12px; min-height: 1.5em; letter-spacing: .04em; }
   #loadMsg.err { color: #ffc9b8; opacity: 1; }
   .linkbtn { background: none; border: 0; color: var(--ink); opacity: .75; font-size: 13px; letter-spacing: .08em; margin-top: 10px; text-decoration: underline; text-underline-offset: 4px; }
@@ -143,7 +149,7 @@
 <body class="intro">
 <header>
   <div class="brand"><b>AudioSpectGraphic</b><span>音からビジュアルをつくる</span></div>
-  <button class="hlink" id="hGal" hidden>みんなの作品</button>
+  <span><button class="hlink" id="songBtn">♪ 星座の曲へ</button> <button class="hlink" id="hGal" hidden>みんなの作品</button></span>
 </header>
 
 <main id="stage">
@@ -183,8 +189,11 @@
   <div class="box">
     <h1>AudioSpectGraphic</h1>
     <h2>音からビジュアルをつくる</h2>
-    <p>音楽に合わせて、音のスペクトラム（低い音から高い音までの大きさ）が<br>形を変えつづけ、ビジュアルが自動でつくられていきます。同じ絵は二度と出ません。<br>好きな瞬間で「とめる」を押すと、その瞬間があなたの作品になります。<small>※ 音が出ます</small></p>
-    <button class="primary" id="startBtn" disabled>読み込み中…</button>
+    <p>音楽に合わせて、音のスペクトラム（低い音から高い音までの大きさ）が<br>形を変えつづけ、ビジュアルが自動でつくられていきます。同じ絵は二度と出ません。<br>曲を選んでください。<small>※ 音が出ます</small></p>
+    <div class="picks">
+      <button class="songPick" data-song="fuji" disabled><b>富士山</b><small>シンセウェイブ・112BPM</small></button>
+      <button class="songPick" data-song="hoshi" disabled><b>星座</b><small>星空・96BPM</small></button>
+    </div>
     <div id="loadMsg"></div>
     <button class="linkbtn" id="galFromStart" hidden>みんなの作品を見る</button>
   </div>
@@ -1103,6 +1112,18 @@ function engRender(E, Q, W, H, target) {
     }
   }
   if (Q.streaks && Q.streaks.length) for (const st of Q.streaks) drawSegs(E, VP, W, H, [[st.p0, st.p1]], st.c, st.a, px * 2.2);
+  if (Q.cons && Q.cons.a > 0.003) {   // 星座：形の音が鳴ったとき、シルエットの上の星を線でつなぐ
+    const sh = shapes[0], L = Q.L[0], P = sh.P, N = sh.N, H0 = HW * Q.bar * L.h * (L.sc ?? 1), ca = Q.cons.a;
+    const at = (u, sd, v) => { const f = clamp(u) * (SAMP - 1), i = Math.min(SAMP - 2, Math.floor(f)), t = f - i, o = i * 6, q = o + 6, hh = sd * v * H0 * (sd < 0 ? Q.dual || 0 : 1);
+      return [0, 1, 2].map(d => P[o + d] + (P[q + d] - P[o + d]) * t + N[o + d] * hh); };
+    const pts = Q.cons.pts.map(([u, sd, v]) => at(u, sd, v)), col = [0.86, 0.94, 1];
+    drawSegs(E, VP, W, H, Q.cons.edges.map(([a, b]) => [pts[a], pts[b]]), col, 0.85 * ca, px * 2.2);
+    const I = M4.id(), cr = [];
+    pts.forEach((p, k) => { const c = M4.xf(VP, p); if (c[2] <= 0) return; const tw = 1 + 0.25 * Math.sin((Q.time || 0) * 5 + k * 2.1), rx = 15 * px * tw * 2 / W, ry = 15 * px * tw * 2 / H;
+      cr.push([[c[0] - rx, c[1], 0], [c[0] + rx, c[1], 0]], [[c[0], c[1] - ry, 0], [c[0], c[1] + ry, 0]]); });
+    drawSegs(E, I, W, H, cr, [1, 1, 1], 0.95 * ca, px * 1.3);
+    drawSegs(E, I, W, H, cr.map(([a, b]) => [[(a[0] * 3 + b[0]) / 4, (a[1] * 3 + b[1]) / 4, 0], [(a[0] + b[0] * 3) / 4, (a[1] + b[1] * 3) / 4, 0]]), [1, 1, 1], ca, px * 4.6);
+  }
   // 目盛り（地平線のときの数字・線）
 
 
@@ -1251,29 +1272,52 @@ function readCurve() {
 }
 
 // =====================================================
-//  曲（song.m4a）の構成
+//  曲（2曲）の構成。はじめる前に選び、再生中も切りかえられる
 // =====================================================
-const SONG = (() => {
-  const BPM = 112, BEAT = 60 / BPM, BAR = BEAT * 4, BARS = 28, DUR = BAR * BARS;   // 60秒
-  const T = (bar, beat = 0) => (bar * 4 + beat) * BEAT;
-  const GAP = T(15, 3);                // ブレイクの最後の一拍は無音
-  const SECTIONS = [
-    { key: 'intro', n: 'イントロ', from: 0, to: 4 }, { key: 'verse', n: 'Aメロ', from: 4, to: 12 }, { key: 'break', n: 'ブレイク', from: 12, to: 16 },
-    { key: 'drop', n: 'サビ', from: 16, to: 24 }, { key: 'outro', n: 'アウトロ', from: 24, to: 28 },
-  ];
-  return { BPM, BEAT, BAR, BARS, DUR, T, GAP, FUJI_T: GAP + 0.07, SECTIONS };
-})();
-const { BEAT, BAR, DUR } = SONG;
+const SONGS = {
+  fuji: { key: 'fuji', name: '富士山', file: 'song.m4a', BPM: 112, BARS: 28,   // 60秒。ブレイクの最後の一拍に「かくれた山」
+    SECTIONS: [{ key: 'intro', n: 'イントロ', from: 0, to: 4 }, { key: 'verse', n: 'Aメロ', from: 4, to: 12 }, { key: 'break', n: 'ブレイク', from: 12, to: 16 },
+               { key: 'drop', n: 'サビ', from: 16, to: 24 }, { key: 'outro', n: 'アウトロ', from: 24, to: 28 }],
+    PLAN: [[0, 'intro'], [2, 'intro'], [4, 'verse'], [6, 'verse'], [8, 'verse'], [10, 'verse'], [12, 'break'], [14, 'poster'],
+           [16, 'drop'], [18, 'drop'], [19, 'dropCam'], [20, 'drop'], [21, 'dropCam'], [22, 'drop'], [23, 'dropCam'], [24, 'outro'], [26, 'outro']],
+    scenes: { 14: 15 },   // 場面の小節 → 形の音が鳴る小節（その最後の一拍）
+    fast: [16],           // 形の音のすぐあと：一気に変わる
+    slots: [{ starts: [4, 6], last: 10 }, { starts: [16, 18], last: 20 }, { starts: [24], long: [22], last: 26 }],   // 特徴的なグラフィックの場所
+    kicks: bar => bar >= 4 && bar < 12 ? 0.55 : bar >= 16 && bar < 24 ? 1 : bar >= 24 && bar < 27 ? 0.4 : 0,
+    flashes: [[16, 0.42], [20, 0.16], [4, 0.1], [24, 0.1]], moods: {}, seqOff: 0, fastLead: 0.28 },
+  hoshi: { key: 'hoshi', name: '星座', file: 'song2.m4a', BPM: 96, BARS: 24,   // 60秒。イントロ・ブレイク・アウトロの最後の一拍に「星座の形の音」
+    SECTIONS: [{ key: 'intro', n: 'イントロ', from: 0, to: 4 }, { key: 'verse', n: 'Aメロ', from: 4, to: 10 }, { key: 'break', n: 'ブレイク', from: 10, to: 14 },
+               { key: 'drop', n: 'サビ', from: 14, to: 20 }, { key: 'outro', n: 'アウトロ', from: 20, to: 24 }],
+    PLAN: [[0, 'intro'], [2, 'cons'], [4, 'verse'], [6, 'verse'], [8, 'verse'], [10, 'break'], [12, 'cons'],
+           [14, 'drop'], [15, 'dropCam'], [16, 'drop'], [17, 'dropCam'], [18, 'drop'], [19, 'dropCam'], [20, 'outro'], [22, 'cons']],
+    scenes: { 2: 3, 12: 13, 22: 23 },
+    fast: [0, 4, 14],
+    slots: [{ starts: [4, 6], last: 8 }, { starts: [14, 16], long: [14], last: 18 }],
+    kicks: bar => bar >= 4 && bar < 10 ? 0.35 : bar >= 14 && bar < 20 ? 0.9 : bar >= 20 && bar < 22 ? 0.3 : 0,
+    flashes: [[14, 0.38], [4, 0.1], [20, 0.08]], seqOff: 7, fastLead: 0.1,
+    moods: {   // 星空の曲：背景は夜の色が多め
+      intro: { bgs: { night: 4, navy: 2, deep: 2, black: 1 } },
+      verse: { bgs: { night: 3, navy: 2, deep: 2, black: 1, sea: 0.6, vivid: 0.6, light: 0.3 } },
+      break: { bgs: { navy: 2, deep: 2, night: 2 }, pals: [4, 0, 1, 3, 6], styles: ['line', 'bar', 'thin', 'dot', 'beam'], fxPool: ['glow', 'stars', 'peak', 'echo', 'refl', 'cap'] },
+      drop: { bgs: { night: 3, black: 2, deep: 1.5, vivid: 1 } },
+      outro: { bgs: { night: 2, deep: 2, navy: 1, warm: 1 } },
+    } },
+};
+let SG = SONGS.fuji, BEAT = 0, BAR = 0, DUR = 0, PLAN = SG.PLAN, T = null;
+function setSongVars(key) { SG = SONGS[key]; BEAT = 60 / SG.BPM; BAR = BEAT * 4; DUR = BAR * SG.BARS; PLAN = SG.PLAN; T = (bar, beat = 0) => (bar * 4 + beat) * BEAT; }
+setSongVars('fuji');
+const pmod = i => ((i % PLAN.length) + PLAN.length) % PLAN.length;
 const ASPECTS = { wide: { w: 1600, h: 1000 }, tall: { w: 1000, h: 1414 } };
 const TAU = Math.PI * 2, PI = Math.PI;
 
 // =====================================================
 //  音
 // =====================================================
-let actx = null, analyser = null, fbuf = null, songBuf = null, master = null;
-let songSrc = null, fujiSrc = null, fujiGain = null, fujiBuf = null, fujiNext = 0;
+let actx = null, analyser = null, fbuf = null, master = null;
+let songSrc = null, motifNodes = [];
+const songBufs = {}, songLoads = {};
 let liveDb = new Array(K).fill(-140);
-const FUJI_LEVEL = 0.55;
+const FUJI_LEVEL = 0.55, CONS_HOLD = 0.32;
 function initAudio() {
   const AC = window.AudioContext || window.webkitAudioContext;
   try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) {}   // iPhoneのマナーモードでも鳴るように
@@ -1285,46 +1329,66 @@ function initAudio() {
   master = actx.createGain(); master.gain.value = 1;
   analyser.connect(master); master.connect(actx.destination);
 }
-async function loadSong() {
-  const msg = $('loadMsg');
-  try {
-    const r = await fetch('song.m4a');
+function loadSong(key) {
+  if (songLoads[key]) return songLoads[key];
+  return songLoads[key] = (async () => {
+    const r = await fetch(SONGS[key].file);
     if (!r.ok) throw new Error('fetch');
     const ab = await r.arrayBuffer();
-    songBuf = await new Promise((res, rej) => { const p = actx.decodeAudioData(ab, res, rej); if (p && p.catch) p.catch(rej); });
-    if (E) { $('startBtn').disabled = false; $('startBtn').textContent = 'はじめる'; msg.textContent = ''; }
-  } catch (e) {
-    msg.textContent = '曲を読み込めませんでした。電波のよいところでページを読み込みなおしてください'; msg.classList.add('err');
-    $('startBtn').textContent = 'はじめる';
-  }
+    return songBufs[key] = await new Promise((res, rej) => { const p = actx.decodeAudioData(ab, res, rej); if (p && p.catch) p.catch(rej); });
+  })().catch(e => { songLoads[key] = null; throw e; });
 }
 // 再生位置：clockBase（とめた時点までの合計）＋ 再生を始めてからの時間。曲は60秒でくり返す
 let playing = false, stopped = false, clockBase = 0, t0 = 0;
 const clockNow = () => playing ? clockBase + Math.max(0, actx.currentTime - t0) : clockBase;
 function startAudio() {
-  songSrc = actx.createBufferSource(); songSrc.buffer = songBuf;
-  songSrc.loop = true; songSrc.loopStart = 0; songSrc.loopEnd = Math.min(DUR, songBuf.duration);
+  const buf = songBufs[SG.key];
+  songSrc = actx.createBufferSource(); songSrc.buffer = buf;
+  songSrc.loop = true; songSrc.loopStart = 0; songSrc.loopEnd = Math.min(DUR, buf.duration);
   songSrc.connect(analyser);
   t0 = actx.currentTime + 0.06;
   songSrc.start(t0, clockBase % DUR);
-  // かくれた山：ブレイク最後の無音の一拍に、ほんの一瞬だけ山の形の音を鳴らす（解析の窓に周期をそろえた音）
-  fujiSrc = actx.createBufferSource(); fujiSrc.buffer = getFujiBuffer(); fujiSrc.loop = true;
-  fujiGain = actx.createGain(); fujiGain.gain.value = 0;
-  fujiSrc.connect(fujiGain); fujiGain.connect(analyser); fujiSrc.start(t0);
-  let d = SONG.FUJI_T - clockBase % DUR; if (d < 0.01) d += DUR;
-  fujiNext = t0 + d; fujiEnv(fujiNext);
+  motifDone.clear(); motifTick();
 }
-function fujiEnv(t) {
-  const g = fujiGain.gain, r = 0.012, h = CFG.hold;
-  g.setValueAtTime(0, t); g.linearRampToValueAtTime(FUJI_LEVEL, t + r); g.setValueAtTime(FUJI_LEVEL, t + r + h); g.linearRampToValueAtTime(0, t + 2 * r + h);
+// 形の音（かくれた山・星座）：無音の一拍に、ほんの一瞬だけ鳴らす。解析の窓に周期をそろえた音なので、形がそのまま読める
+const motifDone = new Set();
+function motifTick() {
+  if (!songSrc) return;
+  const c = clockNow(), loop = Math.floor(c / DUR);
+  for (const L of [loop, loop + 1]) for (const ev of motifsOf(L)) {
+    const S = L * DUR + ev.t, key = SG.key + ':' + L + ':' + ev.t;
+    if (S < c - 0.02 || S - c > 2 || motifDone.has(key)) continue;
+    motifDone.add(key);
+    const at = t0 + (S - clockBase), h = ev.id === 'fuji' ? CFG.hold : CONS_HOLD, r = 0.012;
+    const src = actx.createBufferSource(); src.buffer = motifBuffer(ev.id); src.loop = true;
+    const g = actx.createGain(); g.gain.value = 0;
+    g.gain.setValueAtTime(0, at); g.gain.linearRampToValueAtTime(FUJI_LEVEL, at + r); g.gain.setValueAtTime(FUJI_LEVEL, at + r + h); g.gain.linearRampToValueAtTime(0, at + 2 * r + h);
+    src.connect(g); g.connect(analyser); src.start(Math.max(actx.currentTime, at - 0.05)); src.stop(at + 2 * r + h + 0.05);
+    motifNodes.push(src, g); if (motifNodes.length > 24) motifNodes.splice(0, motifNodes.length - 24);
+  }
 }
-function fujiTick() { if (actx.currentTime > fujiNext + 0.5) { fujiNext += DUR; fujiEnv(fujiNext); } }
 function stopAudio() {
   clockBase = clockNow();
-  for (const n of [songSrc, fujiSrc]) { if (!n) continue; try { n.stop(); } catch (e) {} try { n.disconnect(); } catch (e) {} }
-  if (fujiGain) { try { fujiGain.gain.cancelScheduledValues(0); fujiGain.disconnect(); } catch (e) {} }
-  songSrc = fujiSrc = fujiGain = null;
+  for (const n of [songSrc, ...motifNodes]) { if (!n) continue; try { if (n.stop) n.stop(); } catch (e) {} try { n.disconnect(); } catch (e) {} }
+  songSrc = null; motifNodes = [];
 }
+const motifBufs = {};
+function specBuffer(db) {   // 周期を解析の窓の長さにそろえ、成分を1つおきのビンに置く → 解析結果が揺れず、形がそのまま読める
+  const L = analyser.fftSize, sr = actx.sampleRate, re = new Float64Array(L), im = new Float64Array(L);
+  const l0 = Math.log(F_MIN), l1 = Math.log(F_MAX);
+  for (let b = 2; b < L / 2; b += 2) {
+    const fq = b * sr / L; if (fq < F_MIN || fq > F_MAX) continue;
+    const x = (Math.log(fq) - l0) / (l1 - l0) * K - 0.5, k0 = clamp(Math.floor(x), 0, K - 1), k1 = Math.min(K - 1, k0 + 1), fr = clamp(x - k0);
+    const a = Math.pow(10, (db[k0] * (1 - fr) + db[k1] * fr) / 20), ph = Math.random() * 2 * Math.PI;
+    re[b] = a * Math.cos(ph); im[b] = a * Math.sin(ph); re[L - b] = re[b]; im[L - b] = -im[b];
+  }
+  fft(re, im, true);
+  let mx = 0; for (let i = 0; i < L; i++) mx = Math.max(mx, Math.abs(re[i]));
+  const buf = actx.createBuffer(1, L, sr), d = buf.getChannelData(0);
+  for (let i = 0; i < L; i++) d[i] = re[i] / mx * 0.6;
+  return buf;
+}
+function motifBuffer(id) { return motifBufs[id] || (motifBufs[id] = specBuffer(id === 'fuji' ? FUJI_DB : MOTIFS[id].db)); }
 
 // =====================================================
 //  スペクトラム → 山並み（いま・ゆっくり・ピークを残す・少し前・過去）
@@ -1471,7 +1535,7 @@ function fixPals(W, M) {   // 明るい背景に白・アイス、暗い背景�
 }
 // ---------- 基本の変化 ----------
 const MOVES = {
-  bend(W, r) { const v = W.v, opts = [0, PI, -PI, 0.5 * PI, -0.55 * PI, 2.3, 0].filter(k => Math.abs(k - v.kap) > 0.8); v.kap = pick(r, opts); if (Math.abs(v.kap) < 0.95 * PI) v.poly = 0; },
+  bend(W, r) { /* 大きくひっくり返る曲げ方は避ける */ const v = W.v, all = [0, PI, -PI, 0.5 * PI, -0.55 * PI, 2.3, 0], near = all.filter(k => Math.abs(k - v.kap) > 0.8 && Math.abs(k - v.kap) < 3.6); v.kap = pick(r, near.length ? near : all.filter(k => Math.abs(k - v.kap) > 0.8)); if (Math.abs(v.kap) < 0.95 * PI) v.poly = 0; },
   poly(W, r) { const v = W.v; if (Math.abs(v.kap) < 0.95 * PI) v.kap = (v.kap < 0 ? -1 : 1) * PI;
     if (v.poly > 0.5 && r() < 0.6) v.poly = 0; else { v.poly = 1; v.sides = pick(r, [3, 4, 5, 6, 8].filter(s => s !== v.sides)); }
     v.polyRot += (r() - 0.5) * 2; },
@@ -1703,16 +1767,18 @@ const FEATURE_KEYS = Object.keys(FEATURES).filter(k => !RARE.includes(k));
 const FEATURE_SEQ = (() => { const r = mulberry(SEED * 13 + 5), seq = [];
   for (let k = 0; k < 60; k++) { const p = shuffle(FEATURE_KEYS.filter(n => n !== 'baran' || k % 2 === 0), r); if (seq.length && p[0] === seq[seq.length - 1]) p.push(p.shift()); seq.push(...p); }   // バランは半分の回数
   return seq; })();
-function featurePlan(loop) {   // その周の特徴的なグラフィック：Aメロ・サビ・アウトロに1つずつ（富士山は必ず）
+function featurePlan(loop) {   // その周の特徴的なグラフィック：曲ごとに決まった場所に1つずつ（富士山・星座は別の枠）
   const force = new URLSearchParams(location.search).get('feature');
-  const r = mulberry(SEED * 31 + loop * 101 + 7), m = {};
+  const r = mulberry(SEED * 31 + loop * 101 + 7), m = {}, n = SG.slots.length;
   const r2 = mulberry(SEED * 57 + loop * 3 + 11);
-  const names = force ? force.split(',') : [0, 1, 2].map(k => FEATURE_SEQ[(loop * 3 + k) % FEATURE_SEQ.length]).map(n => n === 'cylinder' && r2() < 0.1 ? 'telescope' : n === 'fish' ? (x => x < 0.2 ? 'sailfish' : x < 0.4 ? 'oarfish' : 'fish')(r2()) : n);
-  const place = (name, starts, last) => { if (!FEATURES[name]) return; const len = FEATURES[name].length, ok = starts.filter(b => b + 2 * (len - 1) <= last); const b = pick(r, ok.length ? ok : [starts[0]]);
-    for (let k = 0; k < len; k++) m[b + 2 * k] = [name, k]; };
-  if (names[0]) place(names[0], [4, 6], 10);            // Aメロ
-  if (names[1]) place(names[1], [16, 18], 20);          // サビ（富士山のすぐあとから）
-  if (names[2]) place(names[2], FEATURES[names[2]] && FEATURES[names[2]].length >= 3 ? [22] : [24], 26);   // サビの終わり〜アウトロ
+  const names = force ? force.split(',') : SG.slots.map((_, k) => FEATURE_SEQ[(loop * n + k + SG.seqOff) % FEATURE_SEQ.length])
+    .map(n => n === 'cylinder' && r2() < 0.1 ? 'telescope' : n === 'fish' ? (x => x < 0.2 ? 'sailfish' : x < 0.4 ? 'oarfish' : 'fish')(r2()) : n);
+  SG.slots.forEach((sl, k) => {
+    const name = names[k]; if (!name || !FEATURES[name]) return;
+    const len = FEATURES[name].length, starts = len >= 3 && sl.long ? sl.long : sl.starts, ok = starts.filter(b => b + 2 * (len - 1) <= sl.last);
+    const b = pick(r, ok.length ? ok : [starts[0]]);
+    for (let q = 0; q < len; q++) m[b + 2 * q] = [name, q];
+  });
   return m;
 }
 // 重ね技が多すぎるとぐちゃぐちゃになるので、基本の目標点では立体の技は使わない・レイヤーは少なめに
@@ -1726,18 +1792,48 @@ function simplify(W) {
   if (vis() === 0) L[0].a = 1;
 }
 
-// ---------- 1周（28小節）の目標点。[小節, パート] ----------
-const PLAN = [[0, 'intro'], [2, 'intro'], [4, 'verse'], [6, 'verse'], [8, 'verse'], [10, 'verse'], [12, 'break'], [14, 'poster'],
-              [16, 'drop'], [18, 'drop'], [19, 'dropCam'], [20, 'drop'], [21, 'dropCam'], [22, 'drop'], [23, 'dropCam'], [24, 'outro'], [26, 'outro']];
+// ---------- 星座：1曲目に出てくる形からなれそうな星座を、スペクトラムの形にした音（富士山と同じように無理やりつくる） ----------
+// pts：形（低い音 u=0 → 高い音 u=1 の高さ）、dual：下側にものびる（上下対称の形）、stars：星の位置 [u, 上1/下-1/線上0]、edges：星をつなぐ線
+const MOTIFS = {
+  uo:      { n: 'うお座', dual: 1, pts: [[0.02, 0], [0.07, 0.78], [0.11, 0.62], [0.18, 0.18], [0.24, 0.42], [0.36, 0.78], [0.5, 0.95], [0.62, 0.86], [0.75, 0.58], [0.86, 0.25], [0.93, 0.04], [0.95, 0]],
+             stars: [[0.07, 1], [0.18, 0], [0.5, 1], [0.93, 0], [0.5, -1], [0.07, -1]], edges: [[0, 1], [1, 5], [5, 0], [1, 2], [2, 3], [3, 4], [4, 1]] },
+  kajiki:  { n: 'かじき座', dual: 0.45, pts: [[0.02, 0], [0.06, 0.62], [0.1, 0.3], [0.16, 0.24], [0.24, 0.32], [0.3, 0.62], [0.38, 0.95], [0.46, 0.98], [0.54, 0.86], [0.6, 0.5], [0.66, 0.36], [0.72, 0.2], [0.8, 0.1], [0.92, 0.06], [0.96, 0]],
+             stars: [[0.06, 1], [0.06, -1], [0.16, 0], [0.36, 1], [0.5, 1], [0.64, 1], [0.95, 0], [0.42, -1]], edges: [[0, 2], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6], [6, 7], [7, 2]] },
+  kanmuri: { n: 'かんむり座', dual: 0, pts: [[0.08, 0], [0.12, 0.4], [0.2, 0.72], [0.27, 0.42], [0.35, 0.88], [0.42, 0.45], [0.5, 1.0], [0.58, 0.45], [0.65, 0.88], [0.73, 0.42], [0.8, 0.72], [0.88, 0.4], [0.92, 0]],
+             stars: [[0.12, 1], [0.2, 1], [0.35, 1], [0.5, 1], [0.65, 1], [0.8, 1], [0.88, 1]], edges: [[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6]] },
+  sankaku: { n: 'さんかく座', dual: 0, pts: [[0.08, 0], [0.5, 1], [0.92, 0]], stars: [[0.12, 0], [0.5, 1], [0.88, 0]], edges: [[0, 1], [1, 2], [2, 0]] },
+  boenkyo: { n: 'ぼうえんきょう座', dual: 1, pts: [[0.04, 0], [0.08, 0.16], [0.16, 0.16], [0.2, 0.26], [0.62, 0.5], [0.66, 0.62], [0.8, 0.66], [0.84, 0.5], [0.88, 0]],
+             stars: [[0.06, 0], [0.2, 1], [0.64, 1], [0.84, 1], [0.84, -1], [0.64, -1], [0.2, -1]], edges: [[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6], [6, 0]] },
+  table:   { n: 'テーブルさん座', dual: 0, pts: [[0.06, 0], [0.14, 0.12], [0.3, 0.82], [0.34, 0.86], [0.66, 0.86], [0.7, 0.82], [0.86, 0.12], [0.94, 0]],
+             stars: [[0.08, 0], [0.31, 1], [0.5, 1], [0.69, 1], [0.92, 0]], edges: [[0, 1], [1, 2], [2, 3], [3, 4]] },
+  tobiuo:  { n: 'とびうお座', dual: 1, pts: [[0.02, 0], [0.06, 0.6], [0.1, 0.46], [0.16, 0.16], [0.24, 0.3], [0.32, 0.55], [0.42, 1.0], [0.5, 0.7], [0.58, 0.42], [0.7, 0.36], [0.82, 0.24], [0.92, 0.04], [0.94, 0]],
+             stars: [[0.06, 1], [0.06, -1], [0.16, 0], [0.42, 1], [0.42, -1], [0.93, 0]], edges: [[0, 2], [1, 2], [2, 3], [3, 5], [5, 4], [4, 2]] },
+  umihebi: { n: 'うみへび座', dual: 1, pts: [[0.02, 0], [0.06, 0.1], [0.1, 0.3], [0.17, 0.1], [0.24, 0.3], [0.31, 0.1], [0.38, 0.3], [0.45, 0.1], [0.52, 0.3], [0.59, 0.1], [0.66, 0.3], [0.73, 0.1], [0.82, 0.32], [0.87, 0.55], [0.92, 0.5], [0.95, 0]],
+             stars: [[0.06, 0], [0.17, 1], [0.31, -1], [0.45, 1], [0.59, -1], [0.73, 1], [0.87, 1], [0.94, 0]], edges: [[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6], [6, 7]] },
+};
+for (const id in MOTIFS) {   // 形 → 鳴らす音の大きさ（山並みにする変換を逆算）→ 画面に出る形（星の高さに使う）
+  const M = MOTIFS[id], xs = M.pts.map(p => p[0]), ys = M.pts.map(p => p[1]);
+  const h = KF.map((_, k) => { const u = (k + 0.5) / K; if (u <= xs[0] || u >= xs[xs.length - 1]) return 0; let j = 1; while (xs[j] < u) j++; return ys[j - 1] + (ys[j] - ys[j - 1]) * (u - xs[j - 1]) / (xs[j] - xs[j - 1]); });
+  M.db = h.map((v, k) => RANGE * Math.pow(Math.max(v, 1e-4), 1 / CURVE) - RANGE - SLOPE * Math.log2(KF[k] / 1000));
+  M.disp = toMountain(M.db);
+}
+const CONS_KEYS = Object.keys(MOTIFS);
+const CONS_SEQ = (() => { const r = mulberry(SEED * 17 + 3), seq = []; for (let k = 0; k < 40; k++) { const p = shuffle(CONS_KEYS.slice(), r); if (seq.length && p[0] === seq[seq.length - 1]) p.push(p.shift()); seq.push(...p); } return seq; })();
+const FORCE_CONS = (new URLSearchParams(location.search).get('cons') || '').split(',').filter(k => MOTIFS[k]);   // 確認用
+function motifsOf(loop) {   // その周の「形の音」：曲の中の時刻と形
+  return Object.entries(SG.scenes).map(([b, mb], k) => ({ bar: +b, t: T(mb, 3) + 0.07, id: SG.key === 'fuji' ? 'fuji' : FORCE_CONS.length ? FORCE_CONS[(loop * 3 + k) % FORCE_CONS.length] : CONS_SEQ[(loop * 3 + k) % CONS_SEQ.length] }));
+}
+// ---------- 1周の目標点。[小節, パート]（曲ごと） ----------
 const WPS = new Map();
-const wpTime = i => Math.floor(i / PLAN.length) * DUR + PLAN[((i % PLAN.length) + PLAN.length) % PLAN.length][0] * BAR;
-const fujiAbs = i => Math.floor(i / PLAN.length) * DUR + SONG.FUJI_T;
+const wpTime = i => Math.floor(i / PLAN.length) * DUR + PLAN[pmod(i)][0] * BAR;
+const motifAbs = i => Math.floor(i / PLAN.length) * DUR + T(SG.scenes[PLAN[pmod(i)][0]], 3) + 0.07;
+const moodOf = m => ({ ...MOODS[m], ...(SG.moods[m] || {}) });
 // 変化の時間：小節の頭をはさんで。次の変化は前の変化が終わってから（重ならない＝瞬間移動しない）
 function spanOf(i) {
-  const bar = PLAN[i % PLAN.length][0], t = wpTime(i), tp = wpTime(i - 1), tn = wpTime(i + 1);
+  const [bar, mood] = PLAN[pmod(i)], t = wpTime(i), tp = wpTime(i - 1), tn = wpTime(i + 1);
   let s = t - 0.55 * (t - tp), e = t + 0.4 * (tn - t);
-  if (bar === 16) { s = t - 0.28; e = t + 0.45 * BAR; }          // サビの頭は、かくれた山が消えてから一気に
-  if (bar === 14) e = fujiAbs(i) + 0.05;                          // 富士山：カメラは、かくれた山の音と同時に正面へ
+  if (SG.fast.includes(bar) && i > 0) { s = t - SG.fastLead; e = t + 0.45 * BAR; }   // 形の音が消えてから一気に
+  if (mood === 'poster' || mood === 'cons') e = motifAbs(i) + 0.05;          // カメラは、形の音と同時に正面へ
   return [s, e];
 }
 const LKEYS = ['a', 'h', 'm', 'ox', 'oy', 'sc', 'rot', 'us', 'k', 'kw', 'kp1', 'kp2', 'n', 'rs', 'rw'];
@@ -1745,7 +1841,7 @@ function copyWP(P) { return { v: { ...P.v }, L: P.L.map(L => ({ ...L0, ...L })),
 function wp(i) {
   if (i < 0) i = 0;
   let W = WPS.get(i); if (W) return W;
-  const loop = Math.floor(i / PLAN.length), [bar, mood] = PLAN[i % PLAN.length], r = mulberry(SEED + i * 7919);
+  const loop = Math.floor(i / PLAN.length), [bar, mood] = PLAN[pmod(i)], r = mulberry(SEED + i * 7919 + (SG.key === 'fuji' ? 0 : 50021));
   const t = wpTime(i), FP = featurePlan(loop);
   if (i === 0) {   // 最初：ポスターに近い、静かな地平線
     W = { v: posterV(), L: POSTER_L(), bgKind: 'night', bg: BGK.night(), lock: {}, win: {} };
@@ -1759,14 +1855,26 @@ function wp(i) {
     if (mood === 'poster') {   // 富士山：見た目は小節14の前半までにポスターへ。カメラだけ、かくれた山の音と同時に正面へ
       W.v = { ...posterV(), yawK: P.v.yawK, rollK: P.v.rollK }; W.L = POSTER_L(); W.bgKind = 'night'; W.bg = BGK.night();
       stagger(W, P, ['color', 'shape', 'coil', 'twist', 'trail', 'fly', 'style', 'layers', 'fx', 'spin'], r, 0.5, 0.62);
-      const fs = (fujiAbs(i) - 0.32 - s) / (e - s), fe = (fujiAbs(i) + 0.02 - s) / (e - s);
+      const fs = (motifAbs(i) - 0.32 - s) / (e - s), fe = (motifAbs(i) + 0.02 - s) / (e - s);
       W.win.cam = [fs, fe]; W.win.lock = [fs, fe];
-      W.lock = { yaw: 0, roll: 0, spin: 0, twPh: 0, coilPh: 0 }; W.fujiLock = true;
+      W.lock = { yaw: 0, roll: 0, spin: 0, twPh: 0, coilPh: 0 }; W.motifT = motifAbs(i); W.scene = 'fuji';
+    } else if (mood === 'cons') {   // 星座：地平線（上下対称の形は、まん中に）。カメラは形の音と同時に正面へ
+      const k = Object.keys(SG.scenes).map(Number).indexOf(bar), id = motifsOf(loop)[k].id, M = MOTIFS[id];
+      W.v = { ...posterV(), yawK: P.v.yawK, rollK: P.v.rollK };
+      Object.assign(W.v, STYLES[pick(r, ['bar', 'thin', 'line', 'bar', 'dot'])]);
+      const two = M.dual > 0.5;
+      Object.assign(W.v, { dual: M.dual, count: pick(r, [80, 96, 110]), bar: two ? 0.62 : 0.92, cap: two ? 0 : 1, glow: 1, stars: 1, floor: two ? 0 : 1, refl: two ? 0 : 1, grid: two ? 0 : 1, hzOff: two ? 1 : 0, zoom: two ? 1.02 : 1 });
+      W.L = [{ a: 1, p: pick(r, [4, 0, 1, 3]), h: 1, m: 0, ...L0 }, { a: 0, p: 1, h: 1, m: 2, ...L0 }, { a: 0, p: 3, h: 1, m: 1, ...L0 }];
+      W.bgKind = pick(r, ['night', 'navy', 'deep', 'night']); W.bg = BGK[W.bgKind](r);
+      stagger(W, P, ['color', 'shape', 'coil', 'twist', 'trail', 'fly', 'style', 'layers', 'fx', 'spin', 'split'], r, 0.5, 0.62);
+      const fs = (motifAbs(i) - 0.32 - s) / (e - s), fe = (motifAbs(i) + 0.02 - s) / (e - s);
+      W.win.cam = [fs, fe]; W.win.lock = [fs, fe];
+      W.lock = { yaw: 0, roll: 0, spin: 0, twPh: 0, coilPh: 0 }; W.motifT = motifAbs(i); W.scene = 'cons'; W.cons = id;
     } else if (mood === 'dropCam') {   // サビの間の小節：カメラだけ動く（特徴的なグラフィックの間はそのまま）
       W.feature = P.feature; W.lockTall = P.lockTall; W.tallSwap = P.tallSwap; W.carryOut = P.carryOut; W.carried = P.carried;
       if (!P.feature || ['dna', 'uni', 'cylinder', 'torus', 'ribbon', 'baran', 'kurage', 'gear', 'saturn', 'infinity', 'aurora', 'crown'].includes(P.feature)) {
         const ms = ['orbit', 'roll', 'zoom', 'tilt', 'flip', 'roll'], n = 1 + (r() < 0.5 ? 1 : 0);
-        shuffle(ms, r).slice(0, n).forEach(m => MOVES[m](W, r, MOODS.drop));
+        shuffle(ms, r).slice(0, n).forEach(m => MOVES[m](W, r, moodOf('drop')));
       }
       stagger(W, P, ['cam'], r, 0.3);
     } else if (FP[bar]) {   // 特徴的なグラフィック
@@ -1780,7 +1888,7 @@ function wp(i) {
       if (W.winAll === 'layers-long') W.win.layers = [0, 1];   // 噛み合わせは、通り抜ける動きをゆっくり見せる
       if (W.fast) { W.win.cam = W.win.lock = [0.42, 0.62]; W.win.layers = [0.5, 0.85]; W.win.shape = [0.3, 0.6]; }   // 望遠鏡：一気にのぞきこむ
     } else {   // 基本の変化
-      const M = MOODS[mood], order = [];
+      const M = moodOf(mood), order = [];
       W.v.camLive = M.camLive;
       const carry = !!(P.feature && P.carryOut);   // 分裂・背中合わせ：その並びのまま次の形へ
       if (P.feature) { clearFeature(W, carry); order.push('layers', 'shape', 'trail', 'fly', 'coil', 'twist'); }   // 特徴的なグラフィックから、ふつうの形へ
@@ -1824,11 +1932,9 @@ function stagger(W, P, order, r, spread, maxEnd = 1) {   // 変わったグル�
 // ---------- その瞬間の状態を計算 ----------
 const ease = x => { x = clamp(x); return x * x * x * (x * (6 * x - 15) + 10); };
 const lerp = (a, b, t) => a + (b - a) * t;
-let tc = 0;
+let tc = 0, lastS = null;
 const layerAng = [0, 0, 0];
 const angFree = { yaw: 0, roll: 0, spin: 0, coilPh: 0, twPh: 0 }, angOff = { yaw: 0, roll: 0, spin: 0, coilPh: 0, twPh: 0 };
-const KICKS = bar => bar >= 4 && bar < 12 ? 0.55 : bar >= 16 && bar < 24 ? 1 : bar >= 24 && bar < 27 ? 0.4 : 0;
-const FLASHES = [[16, 0.42], [20, 0.16], [4, 0.1], [24, 0.1]];
 const lpos = (W, L) => curAspect === 'tall' && W.tallSwap ? { ...L, ox: (L.oy || 0) * 0.85, oy: L.ox || 0 } : L;   // 縦長では横ならびを縦ならびに
 function stateOf(W) {   // 目標点を、混ぜやすい形（色はRGB）に
   return { v: W.v, bg: { sky: W.bg.sky.map(rgb), gnd: W.bg.gnd.map(rgb), ink: rgb(W.bg.ink), cap: rgb(W.bg.cap) },
@@ -1891,12 +1997,22 @@ function evalQ(c, dt, live) {
   if (Q.cpW > 0.001) { Q.cpRows = []; for (let k = 1; k < 16; k++) Q.cpRows[k] = rowAt(c - k * 0.04); }   // 分裂したものは少しずつ遅れて動く（波のように）
   Q.axis = 0;
   // カメラ：いつも少し動いている（手持ちのような）＋ 拍で寄る・揺れる
-  const pos = ((c % DUR) + DUR) % DUR, bt = Math.floor(pos / BEAT), ph = pos - bt * BEAT, p = live ? KICKS(Math.floor(bt / 4)) * Math.exp(-ph / 0.1) : 0;
+  const pos = ((c % DUR) + DUR) % DUR, bt = Math.floor(pos / BEAT), ph = pos - bt * BEAT, p = live ? SG.kicks(Math.floor(bt / 4)) * Math.exp(-ph / 0.1) : 0;
   const cl = Q.camLive || 0;
   if (live) { Q.zoom *= 1 + 0.06 * cl * Math.sin(c * 0.41 + 1.3); Q.pitch += 0.07 * cl * Math.sin(c * 0.27 + 0.4); Q.yaw += 0.07 * cl * Math.sin(c * 0.33); Q.roll += 0.03 * cl * Math.sin(c * 0.21 + 2); }
   Q.zoom *= 1 + (0.018 + 0.03 * Math.max(0, cl - 0.8)) * p; Q.roll += 0.012 * cl * p * (bt % 2 ? 1 : -1); Q.glow = Q.glow * (1 + 0.35 * p);
-  let fl = 0; if (live) for (const [b, a] of FLASHES) { const d = pos - b * BAR; if (d >= 0 && d < 1.2) fl = Math.max(fl, a * Math.exp(-d / 0.22)); }
+  let fl = 0; if (live) for (const [b, a] of SG.flashes) { const d = pos - b * BAR; if (d >= 0 && d < 1.2) fl = Math.max(fl, a * Math.exp(-d / 0.22)); }
   Q.flash = fl; Q.time = c;
+  Q.cons = null; Q.motif = null;
+  for (const i of [tc, tc - 1]) {   // 形の音のあと：星座は星を線でつなぐ（2秒ほど）。図鑑のために、いま何の形かも覚えておく
+    if (i < 0) continue; const W = wp(i); if (!W.scene) continue;
+    const d = c - W.motifT; if (d < -0.02 || d > 1.2) continue;
+    Q.motif = { id: W.scene === 'fuji' ? 'fuji' : W.cons, d };
+    if (W.scene === 'cons') { const M = MOTIFS[W.cons], a = clamp(d / 0.08) * (d < 0.62 ? 1 : Math.max(0, 1 - (d - 0.62) / 0.45));
+      Q.cons = { id: W.cons, a, edges: M.edges, pts: M.stars.map(([u, sd]) => [u, sd, sd ? M.disp[Math.min(K - 1, Math.floor(u * K))] : 0]) }; }
+    break;
+  }
+  lastS = S;
   { const pp = ph + (bt % 2) * BEAT; Q.pulse = live ? Math.exp(-pp / 0.34) * (1 - Math.exp(-pp / 0.05)) : 0; }   // クラゲの拍動（2拍ごと）
   if (live) { const F2 = burstsAt(c); Q.bursts = F2.bursts; for (const b of F2.bursts) Q.flash = Math.max(Q.flash, 0.04 * Math.max(0, 1 - b.age / 0.15)); }
   return Q;
@@ -1956,26 +2072,45 @@ new ResizeObserver(fit).observe($('stage'));
 addEventListener('resize', () => { const a = viewAspect(); if (a !== curAspect && !stopped) { curAspect = a; fit(); } });
 
 // 曲の進みぐあい。押すと、そのパートの最初へ
-const progSpans = SONG.SECTIONS.map(s => { const el = document.createElement('span'); el.style.flex = s.to - s.from; $('prog').appendChild(el); return el; });
+let progSpans = [];
+function buildProg() { progSpans.forEach(el => el.remove()); progSpans = SG.SECTIONS.map(s => { const el = document.createElement('span'); el.style.flex = s.to - s.from; $('prog').appendChild(el); return el; }); progSec = -1; }
+function resetDirector() { for (const W of WPS.values()) { delete W.from; delete W.lockT; delete W.lockD; } }
 function jumpTo(pos) {
   if (!playing) return;
   const loopStart = Math.floor(clockNow() / DUR) * DUR;
   stopAudio(); clockBase = loopStart + pos;
-  for (const W of WPS.values()) { delete W.from; delete W.lockT; delete W.lockD; }
+  resetDirector();
   tc = Math.max(0, Math.floor(loopStart / DUR) * PLAN.length - 1); while (clockBase >= wp(tc + 1).s) tc++;
   startAudio(); lastRender = 0;
 }
 $('prog').addEventListener('click', e => {
-  const r = $('prog').getBoundingClientRect(), bar = clamp((e.clientX - r.left) / r.width) * SONG.BARS;
-  const sec = SONG.SECTIONS.find(s => bar < s.to) || SONG.SECTIONS[0];
+  const r = $('prog').getBoundingClientRect(), bar = clamp((e.clientX - r.left) / r.width) * SG.BARS;
+  const sec = SG.SECTIONS.find(s => bar < s.to) || SG.SECTIONS[0];
   jumpTo(sec.from * BAR);
 });
 let progSec = -1;
 function progFrame(c) {
-  const pos = c % DUR, bar = pos / BAR, si = SONG.SECTIONS.findIndex(s => bar < s.to);
+  const pos = c % DUR, bar = pos / BAR, si = SG.SECTIONS.findIndex(s => bar < s.to);
   $('fill').style.transform = `scaleX(${(pos / DUR).toFixed(4)})`;
   if (si !== progSec) { progSec = si; progSpans.forEach((el, k) => el.classList.toggle('on', k === si)); }
 }
+buildProg();
+// 曲の切りかえ：いまの見た目から、新しい曲のはじまりへ切れ目なく
+function useSong(key) {
+  const cur = lastS;
+  if (playing) stopAudio();
+  setSongVars(key); WPS.clear(); tc = 0; clockBase = 0; buildProg();
+  const W0 = wp(0);
+  if (cur) { W0.from = { v: cur.v, bg: cur.bg, L: cur.L.map(l => ({ ...l, m: l.mx > 0.5 ? l.m : l.mFrom })) }; W0.s = 0; W0.e = 2.2;
+    W0.win = Object.fromEntries([...Object.keys(GROUPS), 'color', 'layers'].map(g => [g, [0.05, 0.95]])); W0.win.lock = [0.1, 0.9]; }
+  document.body.dataset.song = key; updateSongBtn();
+}
+function updateSongBtn() { const o = SG.key === 'fuji' ? SONGS.hoshi : SONGS.fuji; $('songBtn').textContent = `♪ ${o.name}の曲へ`; }
+$('songBtn').addEventListener('click', async () => {
+  const key = SG.key === 'fuji' ? 'hoshi' : 'fuji';
+  if (!songBufs[key]) { toast('曲を読み込んでいます…'); try { await loadSong(key); } catch (e) { toast('曲を読み込めませんでした'); return; } }
+  const was = playing; useSong(key); if (was) { startAudio(); playing = true; lastRender = 0; }
+});
 
 // =====================================================
 //  毎フレーム
@@ -1992,7 +2127,7 @@ function frame(now) {
   let Q;
   if (playing) {
     const c = clockNow();
-    updateCurves(dt, c); fujiTick(); Q = evalQ(c, dt, true); progFrame(c);
+    updateCurves(dt, c); motifTick(); Q = evalQ(c, dt, true); progFrame(c);
   } else { idleCurves(t, dt); Q = evalQ(0, 0, false); Q.time = t; Q.L.forEach(L => { L.ra = L.rb = 0; L.rm = 0; }); }
   sizeCanvas();
   engRender(E, Q, cv.width, cv.height, null);
@@ -2018,12 +2153,14 @@ function play() {
   startAudio(); playing = true; lastRender = 0; adaptAt = performance.now() / 1000;
   requestAnimationFrame(fit);
 }
-$('startBtn').addEventListener('click', async () => {
-  if (!songBuf || !E) return;
+document.querySelectorAll('.songPick').forEach(b => b.addEventListener('click', async () => {
+  const key = b.dataset.song;
+  if (!E) return;
   try { await actx.resume(); } catch (e) {}
-  clockBase = 0; tc = 0;
+  if (!songBufs[key]) { b.disabled = true; try { await loadSong(key); } catch (e) { $('loadMsg').textContent = '曲を読み込めませんでした。電波のよいところでもう一度お試しください'; $('loadMsg').classList.add('err'); b.disabled = false; return; } b.disabled = false; }
+  useSong(key); clockBase = 0; tc = 0;
   play();
-});
+}));
 let frozen = null;
 function stop() {
   if (!playing || !lastQ) return;
@@ -2212,18 +2349,23 @@ function toast(t) { const el = $('toast'); el.textContent = t; el.classList.add(
 // ---------- 起動 ----------
 initAudio();
 if (!E) { $('loadMsg').innerHTML = 'このブラウザでは表示できません（WebGL2が必要です）。<br>新しいブラウザでお試しください'; $('loadMsg').classList.add('err'); }
-loadSong();
+for (const key of ['fuji', 'hoshi']) {   // 2曲とも読み込んでおく（読み込めた曲から選べる）
+  const b = document.querySelector(`.songPick[data-song="${key}"]`);
+  loadSong(key).then(() => { if (E) b.disabled = false; if (key === 'fuji') $('loadMsg').textContent = ''; })
+    .catch(() => { if (key === 'fuji') { $('loadMsg').textContent = '曲を読み込めませんでした。電波のよいところでページを読み込みなおしてください'; $('loadMsg').classList.add('err'); } });
+}
 loadSettings();
 fit();
 requestAnimationFrame(frame);
 
 // テスト用
 window.__asg = {
-  SONG, PLAN, MOODS, wp, evalQ, FUJI, CFG, STYLES,
+  get SONG() { return SG; }, get PLAN() { return PLAN; }, MOODS, MOTIFS, CONS_SEQ, motifsOf, useSong, songBufs, wp, evalQ, FUJI, CFG, STYLES,
   state: () => ({ playing, stopped, clock: clockNow(), tc, aspect: curAspect, capLevel, scaleLv, gapEma, jsEma, ctx: actx && actx.state, cw: cv.width, ch: cv.height }),
   curves: () => ({ disp: Array.from(dispC), db: liveDb.slice() }),
   frozen: () => frozen, still: () => stillBlob, compose: (t) => composeBlob(frozen, t || ''), lastQ: () => lastQ,
-  seek(sec) { const was = playing; if (was) stopAudio(); playing = false; clockBase = Math.floor(clockBase / DUR) * DUR + sec; for (const W of WPS.values()) { delete W.from; delete W.lockT; delete W.lockD; } tc = 0; while (clockBase >= wp(tc + 1).s) tc++; if (was) { startAudio(); playing = true; } },
+  seekAbs(sec) { this.seek(sec - Math.floor(clockNow() / DUR) * DUR); },
+  seek(sec) { const was = playing; if (was) stopAudio(); playing = false; clockBase = Math.floor(clockBase / DUR) * DUR + sec; resetDirector(); tc = 0; while (clockBase >= wp(tc + 1).s) tc++; if (was) { startAudio(); playing = true; } },
   jumpTo, featurePlan, FEATURE_SEQ,
   stop, play, setCap: v => { capLevel = v; }, setScale: v => { scaleLv = v; }, lock: v => { window.__lockCap = v; },
 };
