@@ -702,13 +702,55 @@ const FISH = (() => {   // 魚の輪郭（かんたんなイラスト）：鼻 �
   return { x, y, nx, ny, km };
 })();
 const KOUT = new Float32Array(7);
+// 魚の派生：バショウカジキ（背びれと吻がのびる）・リュウグウノツカイ（長くのびて、ゆらゆら）
+function fishShape(Q, LL, out) {
+  const F = FISH, va = Math.round(LL.kp2 || 0), e = va ? clamp(LL.kp1 || 0) : 0, tm = Q.time || 0;
+  const f = out.fish || (out.fish = { x: new Float32Array(SAMP), y: new Float32Array(SAMP), z: new Float32Array(SAMP), nx: new Float32Array(SAMP), ny: new Float32Array(SAMP), km: new Float32Array(SAMP) });
+  for (let i = 0; i < SAMP; i++) {
+    const u = i / (SAMP - 1), du = Math.min(u, 1 - u), top = u < 0.5;
+    let x = F.x[i], y = F.y[i]; const x0 = x;
+    if (va === 1 && e > 0) {   // バショウカジキ：長い吻、大きな背びれ（帆）、深い尾
+      x += e * 0.78 * Math.exp(-((du / 0.032) ** 2)); y *= 1 - e * 0.85 * Math.exp(-((du / 0.05) ** 2));
+      if (top && x0 > -0.58 && x0 < 0.66) { const sp = x0 > 0.42 ? smooth01(0.66, 0.42, x0) : 0.15 + 0.85 * smooth01(-0.58, 0.42, x0); y += e * 0.72 * sp * (0.92 + 0.08 * Math.sin(tm * 3 + x0 * 6)); }
+      if (x0 < -0.78) y *= 1 + 0.35 * e;
+      x *= 1 + 0.08 * e;
+    } else if (va === 2 && e > 0) {   // リュウグウノツカイ：頭はそのまま、体が長く細く、尾はとがる。ゆらゆら
+      if (x0 < 0.55) x = 0.55 + (x0 - 0.55) * (1 + 1.25 * e);
+      y *= 1 - e * (0.5 * smooth01(0.45, 0.1, x0) + 0.4 * smooth01(-0.55, -0.95, x0));
+      y += e * 0.11 * Math.sin(tm * 2.1 - x * 2.3) * smooth01(0.5, -0.2, x);
+    }
+    f.x[i] = x; f.y[i] = y;
+    const tw = Math.max(0, -x0 - 0.05) / 1.05; f.z[i] = 0.17 * Math.pow(tw, 1.6) * Math.sin(tm * 4.2 - x0 * 2.5) * (1 - 0.6 * (va === 2 ? e : 0));
+  }
+  for (let i = 0; i < SAMP; i++) {
+    const a = i === 0 ? SAMP - 2 : i - 1, b = i === SAMP - 1 ? 1 : i + 1; let tx = f.x[b] - f.x[a], ty = f.y[b] - f.y[a]; const l = Math.hypot(tx, ty) || 1;
+    f.nx[i] = ty / l; f.ny[i] = -tx / l;
+    const a5 = (i - 5 + SAMP - 1) % (SAMP - 1), b5 = (i + 5) % (SAMP - 1), cr = (f.x[i] - f.x[a5]) * (f.y[b5] - f.y[i]) - (f.y[i] - f.y[a5]) * (f.x[b5] - f.x[i]);
+    f.km[i] = cr < 0 ? Math.max(0.15, 1 + cr * 900) : 1;
+  }
+  const t = f.km.slice(); for (let i = 0; i < SAMP; i++) f.km[i] = Math.min(t[i], t[(i + 1) % (SAMP - 1)], t[(i + 3) % (SAMP - 1)], t[(i + SAMP - 2) % (SAMP - 1)], t[(i + SAMP - 4) % (SAMP - 1)]);
+  for (let it = 0; it < 3; it++) { const q = f.km.slice(); for (let i = 0; i < SAMP; i++) f.km[i] = (q[(i + SAMP - 2) % (SAMP - 1)] + 2 * q[i] + q[(i + 1) % (SAMP - 1)]) / 4; }
+  if (va === 2 && e > 0) for (let i = 0; i < SAMP / 2; i++) f.km[i] *= 1 + e * 1.4 * Math.exp(-(((f.x[i] - 0.42) / 0.16) ** 2));   // 頭のとさか（赤い長い棒）
+  if (va === 1 && e > 0) for (let i = 0; i < SAMP; i++) { const du = Math.min(i, SAMP - 1 - i) / (SAMP - 1); f.km[i] *= 1 - 0.6 * e * Math.exp(-((du / 0.05) ** 2)); }   // 吻の棒は短め
+}
 // うにの分裂（4・8・16）：同じ形を小さく並べる
-function cpLayout(n, asp) {
-  const tall = asp < 1, cols = n === 4 ? 2 : n === 8 ? (tall ? 2 : 4) : n === 16 ? 4 : Math.ceil(Math.sqrt(n)), rows = Math.ceil(n / cols);
-  const s = n <= 4 ? 0.5 : n <= 8 ? 0.36 : 0.27, g = 2 * 0.78 * s * 1.15, r = mulberry(n * 31 + 7), out = [];
-  for (let k = 0; k < n; k++) { const cx = k % cols, cy = Math.floor(k / cols);
-    out.push([(cx - (cols - 1) / 2) * g + (r() - 0.5) * 0.25 * g, ((rows - 1) / 2 - cy) * g + (r() - 0.5) * 0.25 * g, (r() - 0.5) * 1.1 * g]); }
-  return { s, pos: out };
+// うにの分裂：1→2→4→8→16 と倍々に。子は親の場所から生まれて、自分の場所へ
+const CP_S = { 1: 1, 2: 0.62, 4: 0.5, 8: 0.36, 16: 0.27 };
+function cpGrid(n, asp) { const t = asp < 1; return n === 2 ? (t ? [1, 2] : [2, 1]) : n === 4 ? [2, 2] : n === 8 ? (t ? [2, 4] : [4, 2]) : n >= 16 ? [4, 4] : [1, 1]; }
+function cpSlots(n, asp) {
+  const [cols, rows] = cpGrid(n, asp), s = CP_S[n] || 0.27, g = 2 * 0.78 * s * 1.15, r = mulberry(n * 31 + 7), out = [];
+  for (let k = 0; k < cols * rows; k++) { const cx = k % cols, cy = Math.floor(k / cols);
+    out.push([(cx - (cols - 1) / 2) * g + (r() - 0.5) * 0.25 * g, ((rows - 1) / 2 - cy) * g + (r() - 0.5) * 0.25 * g, n > 1 ? (r() - 0.5) * 1.1 * g : 0]); }
+  return { s, pos: out, cols, rows };
+}
+function cpLayout(n, asp, p = 1) {   // p：いちばん新しい分裂の進み具合（0：親の場所 → 1：自分の場所）
+  const A = cpSlots(n, asp); if (p >= 1 || n < 2) return { s: A.s, pos: A.pos, a: A.pos.map(() => 1) };
+  const B = cpSlots(n / 2, asp), e = p * p * (3 - 2 * p), byCol = A.cols > B.cols, pos = [], a = [];
+  for (let k = 0; k < A.pos.length; k++) {
+    const cx = k % A.cols, cy = Math.floor(k / A.cols), px = byCol ? cx >> 1 : cx, py = byCol ? cy : cy >> 1, q = B.pos[py * B.cols + px];
+    pos.push([0, 1, 2].map(d => q[d] + (A.pos[k][d] - q[d]) * e)); a.push((byCol ? cx : cy) & 1 ? smooth01(0, 0.3, p) : 1);
+  }
+  return { s: B.s + (A.s - B.s) * e, pos, a };
 }
 function kindAt(Q, LL, k, i, u, lr, j) {   // [x, y, z, nx, ny, nz, 棒の長さの倍率]
   const o = KOUT, R = 0.55, pl = Q.pulse || 0, tm = Q.time || 0;
@@ -747,11 +789,18 @@ function kindAt(Q, LL, k, i, u, lr, j) {   // [x, y, z, nx, ny, nz, 棒の長さ
   } else if (k === 8) {   // 望遠鏡の奥の星：五角形から内向きの棒。辺のまん中ほど長く → 星の形の穴
     const seg = TAU_E / 5, th = TAU_E * u + lr, m = Math.floor(th / seg), f = th / seg - m, rr = (LL.kp1 || 0.34) * polyF(th, 5), ca = (m + 0.5) * seg;
     o[0] = rr * Math.sin(th); o[1] = LL.kp2 || -0.86; o[2] = rr * Math.cos(th); o[3] = -Math.sin(ca); o[4] = 0; o[5] = -Math.cos(ca); o[6] = 0.06 + 0.94 * (1 - Math.abs(2 * f - 1));
-  } else {   // 魚：輪郭にそって外向きの棒。しっぽがゆれる
-    const F = FISH, S = 0.95, fx = F.x[i], c = Math.cos(lr), s = Math.sin(lr);
-    const tw = Math.max(0, -fx - 0.05) / 1.05, w = Math.sin(tm * 4.2 - fx * 2.5);
-    const x = fx * S, y = F.y[i] * S + 0.035 * tw * Math.sin(tm * 4.2 - fx * 2.5 + 1);
-    o[0] = x * c - y * s; o[1] = x * s + y * c; o[2] = 0.17 * Math.pow(tw, 1.6) * w;
+  } else if (k === 9) {   // オーロラ：空にうねる帯から、光の柱が上へ。帯はゆっくり波打つ
+    const x = -1.7 + 3.4 * u, ph = LL.kp1 || 0, z = 0.36 * Math.sin(1.7 * x + 0.35 * tm + ph) + 0.16 * Math.sin(3.1 * x - 0.6 * tm + 2 * ph) - (LL.kp2 || 0);
+    const y = 0.06 * Math.sin(2.3 * x + 0.45 * tm + ph), lean = 0.12 * Math.sin(1.3 * x - 0.5 * tm + ph), nl = Math.hypot(lean, 1);
+    o[0] = x; o[1] = y; o[2] = z; o[3] = lean / nl; o[4] = 1 / nl; o[5] = 0; o[6] = 0.55 + 0.45 * (0.5 + 0.5 * Math.sin(5.3 * x + 0.9 * tm + ph));
+  } else if (k === 10) {   // 王冠：水平な輪から、上へとがった棒。いくつかの山（先は宝石のように光る）
+    const R = LL.kp2 || 0.55, np = LL.kp1 || 0, ph = TAU_E * u + lr, cp = Math.cos(ph), sp = Math.sin(ph), nl = Math.hypot(0.14, 1);
+    o[0] = R * cp; o[1] = -0.22; o[2] = R * sp; o[3] = 0.14 * cp / nl; o[4] = 1 / nl; o[5] = 0.14 * sp / nl;
+    o[6] = np ? 0.3 + 0.7 * Math.pow(Math.abs(Math.cos(ph * np / 2)), 2.5) : 1;
+  } else {   // 魚：輪郭にそって外向きの棒。しっぽがゆれる（派生：バショウカジキ・リュウグウノツカイ）
+    const F = LL._fish, S = 0.95, c = Math.cos(lr), s = Math.sin(lr);
+    const x = F.x[i] * S, y = F.y[i] * S + 0.035 * Math.max(0, -FISH.x[i] - 0.05) / 1.05 * Math.sin(tm * 4.2 - FISH.x[i] * 2.5 + 1);
+    o[0] = x * c - y * s; o[1] = x * s + y * c; o[2] = F.z[i];
     o[3] = F.nx[i] * c - F.ny[i] * s; o[4] = F.nx[i] * s + F.ny[i] * c; o[5] = 0;
     o[6] = F.km[i];
   }
@@ -796,6 +845,7 @@ function shapeOf(Q, j, out) {
   const lr = LL.rot || 0, lc = Math.cos(lr), ls = Math.sin(lr);
   const sph = Q.sph || 0, sForm = Q.sphF || 0, sT = Q.sphTurns || 10, SR = 0.55;
   const kk = LL.k || 0, kw = kk ? clamp(LL.kw || 0) : 0;
+  if (kk === 4 && kw > 0) { fishShape(Q, LL, out); LL._fish = out.fish; }
   for (let i = 0; i < SAMP; i++) {
     const u = i / (SAMP - 1);
     // 回転（平面の中で）
@@ -875,7 +925,7 @@ function camOf(Q, shapes, asp) {
   });
   const cw = Q.cpW || 0;
   if (cw > 0.001 && Q.cpN > 1) {   // 分裂：並んだぶんも入れる
-    const C = cpLayout(Q.cpN, asp), sc = 1 + (C.s - 1) * cw; let a = [1e9, -1e9, 1e9, -1e9, 1e9, -1e9, 1e9, -1e9, 1e9, -1e9];
+    const C = cpLayout(Q.cpN, asp, Q.cpPh ?? 1), sc = 1 + (C.s - 1) * cw; let a = [1e9, -1e9, 1e9, -1e9, 1e9, -1e9, 1e9, -1e9, 1e9, -1e9];
     for (const p of C.pos) { const px = p[0] * cw, py = p[1] * cw, pz = p[2] * cw, qx = px * cr + py * sr, qy = -px * sr + py * cr;
       a = [Math.min(a[0], sc * x0 + px), Math.max(a[1], sc * x1 + px), Math.min(a[2], sc * y0 + py), Math.max(a[3], sc * y1 + py), Math.min(a[4], sc * z0 + pz), Math.max(a[5], sc * z1 + pz),
            Math.min(a[6], sc * rx0 + qx), Math.max(a[7], sc * rx1 + qx), Math.min(a[8], sc * ry0 + qy), Math.max(a[9], sc * ry1 + qy)]; }
@@ -986,9 +1036,9 @@ function engRender(E, Q, W, H, target) {
   let copies = [{ m: null }];
   const cpW = Q.cpW || 0;
   if (cpW > 0.001 && Q.cpN > 1) {
-    const C = cpLayout(Q.cpN, asp), sc = 1 + (C.s - 1) * cpW, rows = Q.cpRows || [];
+    const C = cpLayout(Q.cpN, asp, Q.cpPh ?? 1), sc = 1 + (C.s - 1) * cpW, rows = Q.cpRows || [];
     copies = C.pos.map((p, k) => { const m = M4.id(); m[0] = m[5] = m[10] = sc; m[12] = p[0] * cpW; m[13] = p[1] * cpW; m[14] = p[2] * cpW;
-      return { m, a: k === 0 ? 1 : smooth01(0, 0.35, cpW), row: k ? rows[k] : undefined, swap: k % 2 === 1, depth: M4.xf(VP, [p[0] * cpW, p[1] * cpW, p[2] * cpW])[2] }; });
+      return { m, a: (k === 0 ? 1 : smooth01(0, 0.35, cpW)) * C.a[k], row: k ? rows[k] : undefined, swap: k % 2 === 1, depth: M4.xf(VP, [p[0] * cpW, p[1] * cpW, p[2] * cpW])[2] }; });
     copies.sort((p, q) => q.depth - p.depth);
   }
   const order = ringJ > 0 && shapes[ringJ].kw > 0.5 ? [2, 1, 0].filter(j => j !== ringJ).concat([ringJ]) : [2, 1, 0];
@@ -1373,6 +1423,9 @@ const P_JELLY = PALS.push({ n: 'クラゲ', c: ['#9a7cff', '#ffc8f0'] }) - 1, P_
 const P_FISH = PALS.push({ n: '魚', c: ['#ff6a2b', '#ffd27a'] }) - 1, P_STEEL = PALS.push({ n: '鋼', c: ['#6f7a8e', '#e8edf6'] }) - 1;
 const P_SATURN = PALS.push({ n: '土星', c: ['#b8864b', '#ffe9bd'] }) - 1, P_COPPER = PALS.push({ n: '銅', c: ['#8a4520', '#ffb07a'] }) - 1;
 const P_CONE = PALS.push({ n: 'コーン', c: ['#9a5a24', '#f0c27a'] }) - 1;
+const P_SAIL = PALS.push({ n: 'カジキ', c: ['#1b4aa6', '#a9dcff'] }) - 1, P_OAR = PALS.push({ n: 'リュウグウノツカイ', c: ['#f3f0ec', '#ff2a3a'] }) - 1;
+const P_AURORA = PALS.push({ n: 'オーロラ', c: ['#2bff9a', '#b45cff'] }) - 1, P_AURORA2 = PALS.push({ n: 'オーロラ2', c: ['#3fd0ff', '#ff5cc8'] }) - 1;
+const P_GOLD = PALS.push({ n: '金', c: ['#a8741c', '#ffe08a'] }) - 1, P_JEWEL = PALS.push({ n: '宝石', c: ['#c2103a', '#7fd8ff'] }) - 1;
 const FLAVORS = { vanilla: PALS.push({ n: 'バニラ', c: ['#efdfbd', '#fffaf0'] }) - 1, choco: PALS.push({ n: 'チョコ', c: ['#4a2618', '#a8714f'] }) - 1,
   strawberry: PALS.push({ n: 'いちご', c: ['#ff6f9f', '#ffd3e2'] }) - 1, matcha: PALS.push({ n: '抹茶', c: ['#4f7f2e', '#bfe08e'] }) - 1 };
 const ALLP = PALS.slice(0, 12).map((_, k) => k);
@@ -1505,14 +1558,9 @@ const FEATURES = {
     if (k === 'squash') { W.v.squash = 0.32 + r() * 0.1; W.v.pitch = 0.45 + r() * 0.2; }
     else if (k === 'stretch') { W.v.squash = 1.7 + r() * 0.4; W.v.zoom = 0.95; }
     else if (k === 'morph') { W.v.sphF = pick(r, [1, 2]); W.v.sphTurns = W.v.sphF > 1.5 ? 5 + r() * 3 : 8 + r() * 5; }
-    else {   // 分裂：2つ・3つ・4つ・8つ・16。増えるほど出にくい。増えたまま次の形へ
-      const n = FORCE_SPLIT || +W8(r, { 2: 1, 3: 1, 4: 0.9, 8: 0.5, 16: 0.28 });
-      if (n <= 3) {
-        const p = pals2(r), pos = n === 2 ? [[-0.42, 0], [0.42, 0]] : [[0, 0.36], [-0.42, -0.24], [0.42, -0.24]];
-        W.L = W.L.map((L, j) => j < n ? { ...L, a: 1, p: p[j], m: [0, 2, 1][j], ...L0, ox: pos[j][0], oy: pos[j][1], sc: n === 2 ? 0.58 : 0.5 } : { ...L, a: 0, ...L0 });
-        W.v.strand = 0.7; W.lockTall = null; W.tallSwap = true;
-      } else { W.v.cpN = n; W.v.cpW = 1; W.v.zoom = 1; W.v.yawAmp = 0.5; W.lockTall = null; }
-      W.carryOut = true;
+    else {   // 分裂：1→2→4→8→16 と2拍ごとに倍々に。どこまで増えるかは、多いほど出にくい。増えたまま次の形へ
+      const n = FORCE_SPLIT || +W8(r, { 2: 1, 4: 0.7, 8: 0.45, 16: 0.25 });
+      W.v.cpN = n; W.v.cpW = 1; W.v.zoom = 1; W.v.yawAmp = 0.5; W.lockTall = null; W.cpGrow = true; W.carryOut = true;
     }
   }],
   cylinder: [CYL = (W, r) => { Object.assign(W.v, { sph: 1, sphF: 1, squash: 1, sphTurns: 8 + r() * 5, bar: 0.5 + r() * 0.2, count: 110 + Math.floor(r() * 40), spine: 1, mirror: 0, dual: 0,
@@ -1529,11 +1577,30 @@ const FEATURES = {
            mix ? cream(PI, FLAVORS.choco) : { a: 1, p: P_CONE, h: 0.16, m: 0, ...L0, k: 6, kw: 1, kp1: -1, kp2: 6, n: 130, rs, rw: 1 },
            cream(0, mix ? FLAVORS.vanilla : FLAVORS[fl])];
   }],
-  telescope: [(W, r) => CYL(W, r), (W, r) => {   // 望遠鏡（円柱の10%）：円柱の中をのぞくと、奥に五角形の星
-    Object.assign(W.v, { pitch: 1.4, yawAmp: 0, yawSpd: 0, zoom: 1, fov: 52, camLive: 0.15, spinSpd: W.v.spinSpd * 0.4, fitK: 1, fitW: 0.62, fitH: 0.62, fitCy: -0.1 });
+  telescope: [(W, r) => {   // 望遠鏡（円柱の10%）：まず引きで、先の細い筒（円すいを切った形）を見せる
+    CYL(W, r); Object.assign(W.v, { sphF: 1.5, sphTurns: 10 + r() * 4, pitch: 0.12 + r() * 0.12, zoom: 0.78, yawAmp: 0.35, yawSpd: 0.25, camLive: 0.5, spinSpd: sgn(r) * 0.25 });
     W.lock = { roll: 0 }; W.lockTall = null;
-    W.L[0].a = 1; W.L[1] = { ...W.L[1], a: 0 }; W.L[2] = { a: 1, p: pick(r, [6, 4, 2]), h: 1.15, m: 1, ...L0, k: 8, kw: 1, kp1: 0.37, kp2: -0.9, n: 150, rs: sgn(r) * 0.12, rw: 1 };
+    W.L[2] = { ...W.L[2], a: 0, ...L0, k: 8, kw: 1, kp1: 0.4, kp2: 0.78, n: 150 };
+  }, (W, r) => {   // 一気に中をのぞきこむと、奥に五角形から内向きの棒でできた星が現れる
+    Object.assign(W.v, { pitch: -1.4, yawAmp: 0, yawSpd: 0, zoom: 1, fov: 54, camLive: 0.15, spinSpd: W.v.spinSpd * 0.4, fitK: 1, fitW: 0.62, fitH: 0.62, fitCy: 0.1 });
+    W.lock = { roll: 0 }; W.lockTall = null; W.fast = true;
+    W.L[0].a = 1; W.L[1] = { ...W.L[1], a: 0 }; W.L[2] = { a: 1, p: pick(r, [6, 4, 2]), h: 1.15, m: 1, ...L0, k: 8, kw: 1, kp1: 0.4, kp2: 0.78, n: 150, rs: sgn(r) * 0.12, rw: 1 };
   }],
+  aurora: [(W, r) => {   // オーロラ：夜空にうねる帯から、光の柱がゆらめくカーテン
+    Object.assign(W.v, { kap: 0, poly: 0, sph: 0, mirror: 1, dual: 0, bar: 0.95, count: 150, ...STYLES.beam, width: 0.55, taper: 0, base: 0.12, spine: 0, peak: 0, echo: 0, cap: 0,
+      glow: 1, stars: 1, floor: 0, refl: 0, grid: 0, scan: 0, ink: 0, hzOff: 1, zoom: 1, pitch: 0.06, fov: 38, yawAmp: 0.3, yawSpd: 0.16, rollSpd: 0, spinSpd: 0, camLive: 0.5 });
+    W.lock = { yaw: 0, roll: 0, spin: 0, twPh: 0, coilPh: 0 };
+    W.L = [{ a: 1, p: P_AURORA, h: 2.6, m: 1, ...L0, k: 9, kw: 1, kp1: r() * 3, kp2: 0, n: 170 }, { a: 1, p: P_AURORA2, h: 2.0, m: 3, ...L0, k: 9, kw: 1, kp1: 2 + r() * 2, kp2: 0.45, n: 140 }, { ...W.L[2], a: 0, ...L0 }];
+    W.bgKind = pick(r, ['night', 'deep', 'navy', 'night']); W.bg = BGK[W.bgKind](r);
+  }, (W, r) => { W.v.pitch = -0.12 - r() * 0.1; W.v.yawK += sgn(r) * (0.35 + r() * 0.25); W.v.yawAmp = 0.45; W.v.zoom = 1.1; W.lock = { roll: 0 }; }],
+  crown: [(W, r) => {   // 王冠：水平な金の輪から、上へとがった棒。先は宝石のように光る。ゆっくり回る
+    const np = pick(r, [5, 6, 7, 8]), rs = sgn(r) * (0.2 + r() * 0.12);
+    Object.assign(W.v, { kap: 0, poly: 0, sph: 0, mirror: 0, dual: 0, bar: 0.55, count: 80, ...STYLES.bar, width: 1, taper: 1, base: 0.45, spine: 1, peak: 0, echo: 0, cap: 1,
+      glow: 1, stars: 1, floor: 0, refl: 0, grid: 0, scan: 0, ink: 0, hzOff: 1, zoom: 1, pitch: 0.3 + r() * 0.1, fov: 30, yawAmp: 0.25, yawSpd: 0.2, rollSpd: 0, spinSpd: 0, camLive: 0.5 });
+    W.lock = { roll: 0, spin: 0, twPh: 0, coilPh: 0 };
+    W.L = [{ a: 1, p: P_GOLD, h: 1, m: 0, ...L0, k: 10, kw: 1, kp1: np, kp2: 0.55, n: 84, rs, rw: 1 }, { a: 1, p: P_JEWEL, h: 0.2, m: 2, ...L0, k: 10, kw: 1, kp1: 0, kp2: 0.57, n: np * 2, rs, rw: 1 }, { ...W.L[2], a: 0, ...L0 }];
+    [W.bgKind, W.bg] = darkBg(r);
+  }, (W, r) => { W.v.pitch = 0.62 + r() * 0.15; W.v.zoom = 1.08; W.v.yawAmp = 0.45; W.L.forEach(L => { L.oy = 0.08; }); W.lock = { roll: 0 }; }],
   infinity: [(W, r) => {   // ∞：チェーンソーのように、音の歯が線にそってゆっくり回る
     Object.assign(W.v, { kap: 0, poly: 0, sph: 0, mirror: 1, dual: 0, bar: 0.34, count: 100, ...STYLES[pick(r, ['block', 'bar', 'voxel', 'round', 'pillar'])], width: 0.55, base: 0.5, taper: 0,
       spine: 1, peak: 0, echo: 0, cap: 0, glow: 1, stars: 1, floor: 0, refl: 0, grid: 0, scan: 0, ink: 0, hzOff: 1, zoom: 1, pitch: 0.1, fov: 30, yawAmp: 0.3, yawSpd: 0.25, rollSpd: 0, spinSpd: 0, camLive: 0.5 });
@@ -1627,16 +1694,20 @@ const FEATURES = {
     [W.bgKind, W.bg] = darkBg(r);
   }, (W, r) => { W.L[1].a = 1; W.L[1].kp2 = 0.92 + r() * 0.1; W.v.zoom = 0.95; W.v.yawAmp = 0.5; W.v.pitch = 0.22 + r() * 0.12; W.winAll = 'layers-long'; }],
 };
-const FEATURE_KEYS = Object.keys(FEATURES).filter(k => k !== 'telescope');   // 望遠鏡は円柱の中のレアな回
+// 魚の派生（それぞれ20%）：1小節目はふつうの魚、そのあと発達する
+FEATURES.sailfish = [(W, r) => { FEATURES.fish[0](W, r); W.L[0].kp2 = 1; }, (W, r) => { FEATURES.fish[1](W, r); W.L[0].kp1 = 1; W.L[0].p = P_SAIL; W.v.zoom = 0.95; }];
+FEATURES.oarfish = [(W, r) => { FEATURES.fish[0](W, r); W.L[0].kp2 = 2; }, (W, r) => { FEATURES.fish[1](W, r); W.L[0].kp1 = 1; W.L[0].p = P_OAR; W.L[0].h = 1.15; W.v.yawAmp = 0.2; }];
+const RARE = ['telescope', 'sailfish', 'oarfish'];   // 別のグラフィックの中で、ときどき出る
+const FEATURE_KEYS = Object.keys(FEATURES).filter(k => !RARE.includes(k));
 // 出る順番：全部を1回ずつシャッフルした並びをつなげる（同じものが続かないように）
 const FEATURE_SEQ = (() => { const r = mulberry(SEED * 13 + 5), seq = [];
-  for (let k = 0; k < 60; k++) { const p = shuffle(FEATURE_KEYS.slice(), r); if (seq.length && p[0] === seq[seq.length - 1]) p.push(p.shift()); seq.push(...p); }
+  for (let k = 0; k < 60; k++) { const p = shuffle(FEATURE_KEYS.filter(n => n !== 'baran' || k % 2 === 0), r); if (seq.length && p[0] === seq[seq.length - 1]) p.push(p.shift()); seq.push(...p); }   // バランは半分の回数
   return seq; })();
 function featurePlan(loop) {   // その周の特徴的なグラフィック：Aメロ・サビ・アウトロに1つずつ（富士山は必ず）
   const force = new URLSearchParams(location.search).get('feature');
   const r = mulberry(SEED * 31 + loop * 101 + 7), m = {};
   const r2 = mulberry(SEED * 57 + loop * 3 + 11);
-  const names = force ? force.split(',') : [0, 1, 2].map(k => FEATURE_SEQ[(loop * 3 + k) % FEATURE_SEQ.length]).map(n => n === 'cylinder' && r2() < 0.1 ? 'telescope' : n);
+  const names = force ? force.split(',') : [0, 1, 2].map(k => FEATURE_SEQ[(loop * 3 + k) % FEATURE_SEQ.length]).map(n => n === 'cylinder' && r2() < 0.1 ? 'telescope' : n === 'fish' ? (x => x < 0.2 ? 'sailfish' : x < 0.4 ? 'oarfish' : 'fish')(r2()) : n);
   const place = (name, starts, last) => { if (!FEATURES[name]) return; const len = FEATURES[name].length, ok = starts.filter(b => b + 2 * (len - 1) <= last); const b = pick(r, ok.length ? ok : [starts[0]]);
     for (let k = 0; k < len; k++) m[b + 2 * k] = [name, k]; };
   if (names[0]) place(names[0], [4, 6], 10);            // Aメロ
@@ -1693,7 +1764,7 @@ function wp(i) {
       W.lock = { yaw: 0, roll: 0, spin: 0, twPh: 0, coilPh: 0 }; W.fujiLock = true;
     } else if (mood === 'dropCam') {   // サビの間の小節：カメラだけ動く（特徴的なグラフィックの間はそのまま）
       W.feature = P.feature; W.lockTall = P.lockTall; W.tallSwap = P.tallSwap; W.carryOut = P.carryOut; W.carried = P.carried;
-      if (!P.feature || ['dna', 'uni', 'cylinder', 'torus', 'ribbon', 'baran', 'kurage', 'gear', 'saturn', 'infinity'].includes(P.feature)) {
+      if (!P.feature || ['dna', 'uni', 'cylinder', 'torus', 'ribbon', 'baran', 'kurage', 'gear', 'saturn', 'infinity', 'aurora', 'crown'].includes(P.feature)) {
         const ms = ['orbit', 'roll', 'zoom', 'tilt', 'flip', 'roll'], n = 1 + (r() < 0.5 ? 1 : 0);
         shuffle(ms, r).slice(0, n).forEach(m => MOVES[m](W, r, MOODS.drop));
       }
@@ -1707,6 +1778,7 @@ function wp(i) {
       const order = k === 0 ? ['shape', 'coil', 'layers', 'style', 'trail', 'twist', 'fly', 'color', 'fx', 'cam', 'spin'] : ['layers', 'shape', 'cam', 'style', 'spin'];
       stagger(W, P, order, r, 0.5);
       if (W.winAll === 'layers-long') W.win.layers = [0, 1];   // 噛み合わせは、通り抜ける動きをゆっくり見せる
+      if (W.fast) { W.win.cam = W.win.lock = [0.42, 0.62]; W.win.layers = [0.5, 0.85]; W.win.shape = [0.3, 0.6]; }   // 望遠鏡：一気にのぞきこむ
     } else {   // 基本の変化
       const M = MOODS[mood], order = [];
       W.v.camLive = M.camLive;
@@ -1729,7 +1801,7 @@ function wp(i) {
       stagger(W, P, order, r, mood === 'drop' ? 0.45 : 0.6);
     }
   }
-  delete W.r; delete W.touched;
+  W.tBar = t; delete W.r; delete W.touched;
   WPS.set(i, W);
   for (const k of WPS.keys()) if (k < i - 6) WPS.delete(k);
   return W;
@@ -1811,6 +1883,11 @@ function evalQ(c, dt, live) {
     l.rot = (l.rot || 0) + layerAng[j] * (l.rw || 0);
   });
   Q.trailRows = []; for (let k = 1; k <= TMAX; k++) Q.trailRows[k] = rowAt(c - k * TRAIL_DT);
+  const G = B.cpGrow ? B : tc > 0 && wp(tc - 1).cpGrow && B.carried ? wp(tc - 1) : null;
+  if (G) {   // うにの分裂：1.75拍ごとに倍々（次の形へ変わり始めるまでに増えきる）
+    const st = Math.round(Math.log2(Q.cpN || 2)), el = c - G.s - 0.25 * BEAT, k = clamp(Math.floor(el / (1.75 * BEAT)) + 1, 1, st);
+    Q.cpN = 2 ** k; Q.cpPh = el < 0 ? 0 : clamp((el - (k - 1) * 1.75 * BEAT) / (1.1 * BEAT)); Q.cpW = Math.max(Q.cpW, G === B ? 1 : 0);
+  } else Q.cpPh = 1;
   if (Q.cpW > 0.001) { Q.cpRows = []; for (let k = 1; k < 16; k++) Q.cpRows[k] = rowAt(c - k * 0.04); }   // 分裂したものは少しずつ遅れて動く（波のように）
   Q.axis = 0;
   // カメラ：いつも少し動いている（手持ちのような）＋ 拍で寄る・揺れる
