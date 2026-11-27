@@ -702,6 +702,14 @@ const FISH = (() => {   // 魚の輪郭（かんたんなイラスト）：鼻 �
   return { x, y, nx, ny, km };
 })();
 const KOUT = new Float32Array(7);
+// うにの分裂（4・8・16）：同じ形を小さく並べる
+function cpLayout(n, asp) {
+  const tall = asp < 1, cols = n === 4 ? 2 : n === 8 ? (tall ? 2 : 4) : n === 16 ? 4 : Math.ceil(Math.sqrt(n)), rows = Math.ceil(n / cols);
+  const s = n <= 4 ? 0.5 : n <= 8 ? 0.36 : 0.27, g = 2 * 0.78 * s * 1.15, r = mulberry(n * 31 + 7), out = [];
+  for (let k = 0; k < n; k++) { const cx = k % cols, cy = Math.floor(k / cols);
+    out.push([(cx - (cols - 1) / 2) * g + (r() - 0.5) * 0.25 * g, ((rows - 1) / 2 - cy) * g + (r() - 0.5) * 0.25 * g, (r() - 0.5) * 1.1 * g]); }
+  return { s, pos: out };
+}
 function kindAt(Q, LL, k, i, u, lr, j) {   // [x, y, z, nx, ny, nz, 棒の長さの倍率]
   const o = KOUT, R = 0.55, pl = Q.pulse || 0, tm = Q.time || 0;
   if (k === 1) {   // クラゲの傘：らせん状に棒がならび、ふちに向かって長く（ひだ）
@@ -722,6 +730,23 @@ function kindAt(Q, LL, k, i, u, lr, j) {   // [x, y, z, nx, ny, nz, 棒の長さ
     const t = LL.kp1 ?? 0.4, Rg = LL.kp2 || 0.95, ph = TAU_E * u + lr, ct = Math.cos(t), st = Math.sin(t), cr = Math.cos(RING_ROLL), sr = Math.sin(RING_ROLL);
     const x = Math.cos(ph), y = -Math.sin(ph) * st, z = Math.sin(ph) * ct, xx = x * cr - y * sr, yy = x * sr + y * cr;
     o[0] = Rg * xx; o[1] = Rg * yy; o[2] = Rg * z; o[3] = xx; o[4] = yy; o[5] = z; o[6] = 1;
+  } else if (k === 5) {   // ∞：チェーンソーのように、歯（棒）が線にそって回る。まん中で交差する所は前後にずらす
+    const a = 1.0, t = TAU_E * u + lr, P = tt => { const s = Math.sin(tt), c = Math.cos(tt), d = 1 + s * s; return [a * c / d, 1.35 * a * s * c / d]; };
+    const p0 = P(t), p1 = P(t + 1e-3); let tx = p1[0] - p0[0], ty = p1[1] - p0[1]; const tl = Math.hypot(tx, ty) || 1; tx /= tl; ty /= tl;
+    const sg = clamp(p0[0] / 0.16, -1, 1);
+    o[0] = p0[0]; o[1] = p0[1]; o[2] = 0.15 * Math.sin(t); o[3] = ty * Math.sign(sg || 1); o[4] = -tx * Math.sign(sg || 1); o[5] = 0; o[6] = Math.abs(sg);
+  } else if (k === 6) {   // ソフトクリームのコーン：らせん2本（逆まわり）で格子もよう
+    const yA = -0.95, yT = 0.12, Rk = 0.36, dir = LL.kp1 < 0 ? -1 : 1, ph = TAU_E * (LL.kp2 || 6) * u * dir + lr, rr = 0.012 + Rk * u;
+    const al = Math.atan2(Rk, yT - yA), cp = Math.cos(ph), sp = Math.sin(ph);
+    o[0] = rr * cp; o[1] = yA + (yT - yA) * u; o[2] = rr * sp; o[3] = Math.cos(al) * cp; o[4] = -Math.sin(al); o[5] = Math.cos(al) * sp; o[6] = 0.4 + 0.6 * u;
+  } else if (k === 7) {   // ソフトクリームのクリーム：上にいくほど細くなるらせん（ミックスは2本）
+    const y0 = 0.1, H = 0.98, R0 = 0.42, T = LL.kp2 || 3.6, ph = TAU_E * T * u + (LL.kp1 || 0) + lr;
+    const rr = R0 * Math.pow(1 - u, 0.8) + 0.01, yy = y0 + H * Math.pow(u, 0.9) + 0.03 * Math.sin(tm * 2 + u * 9) * u, cp = Math.cos(ph), sp = Math.sin(ph);
+    const up = 0.35 + 0.9 * u * u, nl = Math.hypot(1, up);
+    o[0] = rr * cp; o[1] = yy; o[2] = rr * sp; o[3] = cp / nl; o[4] = up / nl; o[5] = sp / nl; o[6] = 1 - 0.55 * u;
+  } else if (k === 8) {   // 望遠鏡の奥の星：五角形から内向きの棒。辺のまん中ほど長く → 星の形の穴
+    const seg = TAU_E / 5, th = TAU_E * u + lr, m = Math.floor(th / seg), f = th / seg - m, rr = (LL.kp1 || 0.34) * polyF(th, 5), ca = (m + 0.5) * seg;
+    o[0] = rr * Math.sin(th); o[1] = LL.kp2 || -0.86; o[2] = rr * Math.cos(th); o[3] = -Math.sin(ca); o[4] = 0; o[5] = -Math.cos(ca); o[6] = 0.06 + 0.94 * (1 - Math.abs(2 * f - 1));
   } else {   // 魚：輪郭にそって外向きの棒。しっぽがゆれる
     const F = FISH, S = 0.95, fx = F.x[i], c = Math.cos(lr), s = Math.sin(lr);
     const tw = Math.max(0, -fx - 0.05) / 1.05, w = Math.sin(tm * 4.2 - fx * 2.5);
@@ -848,6 +873,14 @@ function camOf(Q, shapes, asp) {
     x0 = mix(x0, Math.min(x0, bx0)); x1 = mix(x1, Math.max(x1, bx1)); y0 = mix(y0, Math.min(y0, by0)); y1 = mix(y1, Math.max(y1, by1)); z0 = mix(z0, Math.min(z0, bz0)); z1 = mix(z1, Math.max(z1, bz1));
     rx0 = mix(rx0, Math.min(rx0, qx0)); rx1 = mix(rx1, Math.max(rx1, qx1)); ry0 = mix(ry0, Math.min(ry0, qy0)); ry1 = mix(ry1, Math.max(ry1, qy1));
   });
+  const cw = Q.cpW || 0;
+  if (cw > 0.001 && Q.cpN > 1) {   // 分裂：並んだぶんも入れる
+    const C = cpLayout(Q.cpN, asp), sc = 1 + (C.s - 1) * cw; let a = [1e9, -1e9, 1e9, -1e9, 1e9, -1e9, 1e9, -1e9, 1e9, -1e9];
+    for (const p of C.pos) { const px = p[0] * cw, py = p[1] * cw, pz = p[2] * cw, qx = px * cr + py * sr, qy = -px * sr + py * cr;
+      a = [Math.min(a[0], sc * x0 + px), Math.max(a[1], sc * x1 + px), Math.min(a[2], sc * y0 + py), Math.max(a[3], sc * y1 + py), Math.min(a[4], sc * z0 + pz), Math.max(a[5], sc * z1 + pz),
+           Math.min(a[6], sc * rx0 + qx), Math.max(a[7], sc * rx1 + qx), Math.min(a[8], sc * ry0 + qy), Math.max(a[9], sc * ry1 + qy)]; }
+    [x0, x1, y0, y1, z0, z1, rx0, rx1, ry0, ry1] = a;
+  }
   const hz = Q.hz, fov = Q.fov * Math.PI / 180, tf = Math.tan(fov / 2);
   const cx = (x0 + x1) / 2, cyy = (y0 + y1) / 2, cz = (z0 + z1) / 2;
   let halfW = Math.max((rx1 - rx0) / 2, 0.05), halfH = Math.max((ry1 - ry0) / 2, 0.05);
@@ -874,6 +907,7 @@ function engDerive(Q, asp) {   // 形から自動で決まるもの（床・地�
   const lum = lum3(Q.bgc.sky[1]);
   Q.dark = smooth01(0.72, 0.5, lum);
   Q.hz = (1 - (Q.hzOff || 0)) * (1 - (Q.sph || 0)) * (1 - smooth01(0, 0.55 * Math.PI, Math.abs(Q.kap))) * (1 - smooth01(0.02, 0.12, Q.coilR)) * (1 - Q.fly) * (1 - smooth01(0.04, 0.35, Math.abs(Math.sin(Q.spin)))) * smooth01(0.5, 0.95, Math.cos(Q.roll));   // 傾いた・逆さの地平線には床を出さない
+  Q.hz *= 1 - smooth01(0, 0.3, Q.cpW || 0);
   Q.floorA = Q.floor * Q.hz;
   Q.floorY = 0; Q.floorZ0 = 0;
   Q.gridX = 0.0248; Q.gridZ = (asp > 1 ? 2.8 : 5.2) / 26;
@@ -948,6 +982,15 @@ function engRender(E, Q, W, H, target) {
     const L0 = Q.L[0], s0 = shapes[0]; occC = s0.ctr; occR = 0.55 * (L0.sc ?? 1) * 0.96;
     occ[0] = occ[ringJ] = w * clamp(Q.sph || 0);
   }
+  // 分裂のならび
+  let copies = [{ m: null }];
+  const cpW = Q.cpW || 0;
+  if (cpW > 0.001 && Q.cpN > 1) {
+    const C = cpLayout(Q.cpN, asp), sc = 1 + (C.s - 1) * cpW, rows = Q.cpRows || [];
+    copies = C.pos.map((p, k) => { const m = M4.id(); m[0] = m[5] = m[10] = sc; m[12] = p[0] * cpW; m[13] = p[1] * cpW; m[14] = p[2] * cpW;
+      return { m, a: k === 0 ? 1 : smooth01(0, 0.35, cpW), row: k ? rows[k] : undefined, swap: k % 2 === 1, depth: M4.xf(VP, [p[0] * cpW, p[1] * cpW, p[2] * cpW])[2] }; });
+    copies.sort((p, q) => q.depth - p.depth);
+  }
   const order = ringJ > 0 && shapes[ringJ].kw > 0.5 ? [2, 1, 0].filter(j => j !== ringJ).concat([ringJ]) : [2, 1, 0];
   const draw = (j, o) => {
     const L = Q.L[j], sh = shapes[j];
@@ -955,8 +998,9 @@ function engRender(E, Q, W, H, target) {
     gl.uniform1i(U.uRA, o.ra ?? L.ra); gl.uniform1i(U.uRB, o.rb ?? L.rb); gl.uniform1f(U.uRM, o.rm ?? L.rm); gl.uniform1f(U.uShift, L.us || 0); gl.uniform1f(U.uShade, o.shade ?? 1);
     gl.uniform1f(U.uH, HW * Q.bar * L.h * (L.sc ?? 1) * (o.hm || 1)); gl.uniform1f(U.uEnv, o.env || 1); gl.uniform1f(U.uPad, HW * 0.06);
     gl.uniform1f(U.uLen, sh.len); gl.uniform3fv(U.uOff, o.off || [0, 0, 0]);
-    gl.uniform3fv(U.uC0, L.c0); gl.uniform3fv(U.uC1, L.c1); gl.uniform3fv(U.uCapC, capC);
-    gl.uniform3fv(U.uPeakC, dark > 0.5 ? mixC3(L.c1, [1, 1, 1], 0.5) : L.c1);
+    const c0 = o.swap ? mixC3(L.c1, L.c0, 0.35) : L.c0, c1 = o.swap ? mixC3(L.c0, L.c1, 0.35) : L.c1;   // 分裂したものは色を少し入れかえる
+    gl.uniform3fv(U.uC0, c0); gl.uniform3fv(U.uC1, c1); gl.uniform3fv(U.uCapC, capC);
+    gl.uniform3fv(U.uPeakC, dark > 0.5 ? mixC3(c1, [1, 1, 1], 0.5) : c1);
     gl.uniform1f(U.uCap, o.flat ? 0 : Q.cap); gl.uniform1f(U.uPeak, o.flat ? 0 : Q.peak); gl.uniform1f(U.uSpine, o.flat || o.refl ? 0 : Q.spine || 0);
     gl.uniform1f(U.uFlat, o.flat ? 1 : 0); gl.uniform1f(U.uA, o.a);
     gl.uniform1f(U.uRefl, o.refl || 0); gl.uniformMatrix4fv(U.uM, false, o.refl ? MIR : o.m || I);
@@ -969,7 +1013,7 @@ function engRender(E, Q, W, H, target) {
   const nT = Q.trail * TMAX, trailRows = Q.trailRows || [];
   for (const j of order) {
     const L = Q.L[j]; if (L.a <= 0.003) continue;
-    if (nT > 0.01) {
+    if (nT > 0.01 && copies.length === 1) {
       const list = [];
       for (let k = Math.ceil(nT); k >= 1; k--) {
         const tm = Q.trailMode || 0, z = -Q.trailDir * k * Q.trailDz * (1 - tm), a = L.a * Math.min(1, nT - k + 1) * Math.pow(1 - k / (TMAX + 2), 1.2 + tm * 1.8) * (1 - 0.45 * tm);
@@ -980,11 +1024,14 @@ function engRender(E, Q, W, H, target) {
       list.sort((p, q) => q.depth - p.depth);
       for (const it of list) { const row = trailRows[it.k] ?? 4; if (it.a > 0.003 && it.depth > 0.01) draw(j, { a: it.a, off: [0, 0, it.z], m: it.m, ra: row, rb: row, rm: 0 }); }
     }
-    if (reflA > 0.003) draw(j, { a: L.a, refl: reflA });
-    if (Q.echo > 0.003) { draw(j, { a: L.a * 0.12 * Q.echo, hm: 1.24, flat: 1 }); draw(j, { a: L.a * 0.25 * Q.echo, hm: 1.12, flat: 1 }); }
-    const th = Q.thick || 0;
-    if (th > 0.003) { const S = 9, zs = cam.eye[2] >= cam.tgt[2] ? -1 : 1; for (let k = S - 1; k >= 1; k--) draw(j, { a: L.a, off: [0, 0, zs * th * 0.1 * k / (S - 1)], shade: 0.34 + 0.5 * (1 - k / (S - 1)) }); }   // 厚み（カメラから見て奥へ重ねて立体に）
-    draw(j, { a: L.a });
+    for (const cp of copies) {   // 分裂したときは、小さく並べて何度も描く（遠いものから）
+      const cd = (o) => draw(j, cp.m ? { ...o, a: o.a * cp.a, m: o.m ? M4.mul(cp.m, o.m) : cp.m, ra: cp.row ?? o.ra, rb: cp.row ?? o.rb, rm: cp.row !== undefined ? 0 : o.rm, swap: cp.swap } : o);
+      if (reflA > 0.003 && !cp.m) draw(j, { a: L.a, refl: reflA });
+      if (Q.echo > 0.003) { cd({ a: L.a * 0.12 * Q.echo, hm: 1.24, flat: 1 }); cd({ a: L.a * 0.25 * Q.echo, hm: 1.12, flat: 1 }); }
+      const th = Q.thick || 0;
+      if (th > 0.003) { const S = 9, zs = cam.eye[2] >= cam.tgt[2] ? -1 : 1; for (let k = S - 1; k >= 1; k--) cd({ a: L.a, off: [0, 0, zs * th * 0.1 * k / (S - 1)], shade: 0.34 + 0.5 * (1 - k / (S - 1)) }); }   // 厚み（カメラから見て奥へ重ねて立体に）
+      cd({ a: L.a });
+    }
   }
   // 花火：咲いた瞬間の音の形が、広がって、落ちながら消えていく
   if (Q.bursts && Q.bursts.length) {
@@ -1276,6 +1323,7 @@ const GROUPS = {
   trail: ['trail', 'trailDz', 'trailDir', 'layerDepth', 'trailMode', 'trailExp'],
   style: ['count', 'width', 'smooth', 'segA', 'segP', 'segF', 'round', 'tip', 'fill', 'spine', 'bar', 'mirror', 'dual', 'thick', 'beam', 'taper', 'base'],
   color: ['sea'],
+  split: ['cpW', 'cpN'],
   fx: ['cap', 'peak', 'echo', 'glow', 'refl', 'floor', 'grid', 'stars', 'grain', 'scan', 'ink', 'axis'],
   cam: ['zoom', 'pitch', 'fov', 'yawK', 'yawAmp', 'rollK', 'yawSpd', 'rollSpd', 'tx', 'ty', 'tz', 'camLive', 'fitK', 'fitW', 'fitH', 'fitCy'],
   fly: ['fly', 'flyD'],
@@ -1324,6 +1372,9 @@ const P_BARAN = PALS.push({ n: 'バラン', c: ['#0c8a3e', '#46e886'] }) - 1, P_
 const P_JELLY = PALS.push({ n: 'クラゲ', c: ['#9a7cff', '#ffc8f0'] }) - 1, P_JELLY2 = PALS.push({ n: 'クラゲの足', c: ['#7fd8ff', '#f4d8ff'] }) - 1;
 const P_FISH = PALS.push({ n: '魚', c: ['#ff6a2b', '#ffd27a'] }) - 1, P_STEEL = PALS.push({ n: '鋼', c: ['#6f7a8e', '#e8edf6'] }) - 1;
 const P_SATURN = PALS.push({ n: '土星', c: ['#b8864b', '#ffe9bd'] }) - 1, P_COPPER = PALS.push({ n: '銅', c: ['#8a4520', '#ffb07a'] }) - 1;
+const P_CONE = PALS.push({ n: 'コーン', c: ['#9a5a24', '#f0c27a'] }) - 1;
+const FLAVORS = { vanilla: PALS.push({ n: 'バニラ', c: ['#efdfbd', '#fffaf0'] }) - 1, choco: PALS.push({ n: 'チョコ', c: ['#4a2618', '#a8714f'] }) - 1,
+  strawberry: PALS.push({ n: 'いちご', c: ['#ff6f9f', '#ffd3e2'] }) - 1, matcha: PALS.push({ n: '抹茶', c: ['#4f7f2e', '#bfe08e'] }) - 1 };
 const ALLP = PALS.slice(0, 12).map((_, k) => k);
 
 const SEED = +(new URLSearchParams(location.search).get('seed') || 0) || (Math.random() * 2 ** 31) | 0;
@@ -1352,7 +1403,7 @@ function posterV() {
     kap: 0, poly: 0, sides: 6, polyRot: 0, coilR: 0, coilTurns: 2, strand: 0, radial: 0, radSign: 1, coilSpd: 0, twist: 0, twSpd: 0,
     trail: 0, trailDz: 0.1, trailDir: 1, layerDepth: 0, trailMode: 0, trailExp: 0.05,
     count: 100, width: 0.6, smooth: 0, segA: 0, segP: 0.72, segF: 0.7, round: 0, tip: 0, fill: 1, spine: 0, bar: 1, mirror: 0, dual: 0, thick: 0, beam: 0,
-    sph: 0, sphF: 0, sphTurns: 10, squash: 1, hzOff: 0, taper: 0, base: 0, sea: 0, camLive: 0, fitK: 0, fitW: 1.3, fitH: 0.8, fitCy: 0.25,
+    sph: 0, sphF: 0, sphTurns: 10, squash: 1, hzOff: 0, taper: 0, base: 0, sea: 0, cpW: 0, cpN: 1, camLive: 0, fitK: 0, fitW: 1.3, fitH: 0.8, fitCy: 0.25,
     cap: 1, peak: 0, echo: 0, glow: 1, refl: 1, floor: 1, grid: 1, stars: 1, grain: 0, scan: 0, ink: 0, axis: 0,
     zoom: 1, pitch: 0.017, fov: 26, yawK: 0, yawAmp: 0, rollK: 0, yawSpd: 0, rollSpd: 0, tx: 0, ty: 0, tz: 0, fly: 0, flyD: 1, spinK: 0, spinSpd: 0,
   };
@@ -1403,12 +1454,15 @@ const MOVE_GROUPS = { bend: ['shape'], poly: ['shape'], flip: ['cam'], roll: ['c
 // ---------- 特徴的なグラフィック：全部が同じ回数ずつ、順番をシャッフルして出る ----------
 const darkBg = r => { const k = W8(r, { night: 1, black: 1, deep: 1, navy: 1, sea: 0.6 }); return [k, BGK[k](r)]; };
 const pals2 = r => shuffle([0, 1, 2, 3, 6, 7], r);
-function clearFeature(W) {   // 特徴的なグラフィックの部分をもどす（基本の形へ）
+function clearFeature(W, keep) {   // 特徴的なグラフィックの部分をもどす（基本の形へ）。keep：分裂・背中合わせの並びはそのまま
+  if (!keep) W.v.cpW = 0;
   Object.assign(W.v, { coilR: 0, radial: 0, coilSpd: 0, twist: 0, twSpd: 0, trail: 0, trailMode: 0, trailDir: 1, fly: 0, sph: 0, squash: 1, layerDepth: 0, hzOff: 0, fitK: 0, thick: Math.min(W.v.thick, 1), taper: 0, base: 0 });
   if (W.v.fov > 42) W.v.fov = 30 + W.r() * 10;
   W.v.tx = W.v.ty = W.v.tz = 0;
-  W.L.forEach(l => Object.assign(l, L0));
+  W.L.forEach(l => Object.assign(l, L0, keep ? { ox: l.ox, oy: l.oy, sc: l.sc, rot: l.rot, us: l.us } : {}));
 }
+let CYL = null;
+const FORCE_SPLIT = +new URLSearchParams(location.search).get('split') || 0;   // 確認用
 const FEATURES = {
   dna: [(W, r) => {   // 2本の鎖から音の棒がのびて、まん中で出会う（はしご）
     Object.assign(W.v, { kap: 0, poly: 0, coilR: 0.2, coilTurns: 2.3 + r() * 0.9, strand: PI, radial: 1, radSign: -1, coilSpd: sgn(r) * (0.5 + r() * 0.4),
@@ -1439,7 +1493,7 @@ const FEATURES = {
     W.lock = { roll: 0 }; W.lockTall = { roll: PI / 2 }; W.winAll = 'layers-long';
   }, (W) => {   // 通り抜けて背中合わせ
     W.L[0].oy = 0.06; W.L[1].oy = -0.06; W.v.zoom = 1; W.v.yawAmp = 0.5; W.v.pitch = 0.1; W.v.camLive = 0.6;
-    W.lock = { roll: 0 }; W.lockTall = { roll: PI / 2 }; W.winAll = 'layers-long';
+    W.lock = { roll: 0 }; W.lockTall = { roll: PI / 2 }; W.winAll = 'layers-long'; W.carryOut = true;   // 背中合わせのまま次の形へ
   }],
   uni: [(W, r) => {   // 球（うに）
     Object.assign(W.v, { sph: 1, sphF: 0, squash: 1, sphTurns: 9 + r() * 6, bar: 0.55 + r() * 0.2, count: 100 + Math.floor(r() * 50), spine: 1, mirror: 0, dual: 0,
@@ -1447,20 +1501,46 @@ const FEATURES = {
     Object.assign(W.v, STYLES[pick(r, ['thin', 'dot', 'beam', 'bar'])]); W.v.width = Math.min(W.v.width, 0.5);
     W.L.forEach((L, j) => { L.a = j === 0 ? 1 : 0; Object.assign(L, L0); });
   }, (W, r) => {   // 変身：つぶれる／のびる／分裂して小さくなる／形が変わる
-    const k = pick(r, ['squash', 'stretch', 'split', 'split', 'morph']);
+    const k = FORCE_SPLIT ? 'split' : pick(r, ['squash', 'stretch', 'split', 'split', 'morph']);
     if (k === 'squash') { W.v.squash = 0.32 + r() * 0.1; W.v.pitch = 0.45 + r() * 0.2; }
     else if (k === 'stretch') { W.v.squash = 1.7 + r() * 0.4; W.v.zoom = 0.95; }
     else if (k === 'morph') { W.v.sphF = pick(r, [1, 2]); W.v.sphTurns = W.v.sphF > 1.5 ? 5 + r() * 3 : 8 + r() * 5; }
-    else {   // 分裂
-      const n = pick(r, [2, 3, 3]), p = pals2(r), pos = n === 2 ? [[-0.42, 0], [0.42, 0]] : [[0, 0.36], [-0.42, -0.24], [0.42, -0.24]];
-      W.L = W.L.map((L, j) => j < n ? { ...L, a: 1, p: p[j], m: [0, 2, 1][j], ...L0, ox: pos[j][0], oy: pos[j][1], sc: n === 2 ? 0.58 : 0.5 } : { ...L, a: 0, ...L0 });
-      W.v.strand = 0.7; W.lockTall = null; W.tallSwap = true;
+    else {   // 分裂：2つ・3つ・4つ・8つ・16。増えるほど出にくい。増えたまま次の形へ
+      const n = FORCE_SPLIT || +W8(r, { 2: 1, 3: 1, 4: 0.9, 8: 0.5, 16: 0.28 });
+      if (n <= 3) {
+        const p = pals2(r), pos = n === 2 ? [[-0.42, 0], [0.42, 0]] : [[0, 0.36], [-0.42, -0.24], [0.42, -0.24]];
+        W.L = W.L.map((L, j) => j < n ? { ...L, a: 1, p: p[j], m: [0, 2, 1][j], ...L0, ox: pos[j][0], oy: pos[j][1], sc: n === 2 ? 0.58 : 0.5 } : { ...L, a: 0, ...L0 });
+        W.v.strand = 0.7; W.lockTall = null; W.tallSwap = true;
+      } else { W.v.cpN = n; W.v.cpW = 1; W.v.zoom = 1; W.v.yawAmp = 0.5; W.lockTall = null; }
+      W.carryOut = true;
     }
   }],
-  cylinder: [(W, r) => { Object.assign(W.v, { sph: 1, sphF: 1, squash: 1, sphTurns: 8 + r() * 5, bar: 0.5 + r() * 0.2, count: 110 + Math.floor(r() * 40), spine: 1, mirror: 0, dual: 0,
+  cylinder: [CYL = (W, r) => { Object.assign(W.v, { sph: 1, sphF: 1, squash: 1, sphTurns: 8 + r() * 5, bar: 0.5 + r() * 0.2, count: 110 + Math.floor(r() * 40), spine: 1, mirror: 0, dual: 0,
     spinSpd: sgn(r) * (0.35 + r() * 0.3), pitch: 0.2 + r() * 0.3, zoom: 1.05, yawAmp: 0.3, yawSpd: 0.3, hzOff: 1, camLive: 0.8, ...STYLES[pick(r, ['thin', 'dot', 'beam'])] }); W.v.width = Math.min(W.v.width, 0.5); }],
   tornado: [(W, r) => { Object.assign(W.v, { sph: 1, sphF: 2, squash: 1, sphTurns: 5 + r() * 3, bar: 0.5 + r() * 0.2, count: 110 + Math.floor(r() * 40), spine: 1, mirror: 0, dual: 0,
-    spinSpd: sgn(r) * (0.5 + r() * 0.4), pitch: 0.25 + r() * 0.3, zoom: 1.05, yawAmp: 0.3, yawSpd: 0.3, hzOff: 1, camLive: 0.8, ...STYLES[pick(r, ['thin', 'dot', 'beam'])] }); W.v.width = Math.min(W.v.width, 0.5); }],
+    spinSpd: sgn(r) * (0.5 + r() * 0.4), pitch: 0.25 + r() * 0.3, zoom: 1.05, yawAmp: 0.3, yawSpd: 0.3, hzOff: 1, camLive: 0.8, ...STYLES[pick(r, ['thin', 'dot', 'beam'])] }); W.v.width = Math.min(W.v.width, 0.5); },
+  (W, r) => {   // 竜巻が、ソフトクリームに：格子もようのコーン＋上にいくほど細いらせんのクリーム（フレーバーごとに色）
+    const fl = W8(r, { vanilla: 1, choco: 1, strawberry: 1, matcha: 1, mix: 1 }), mix = fl === 'mix', rs = sgn(r) * (0.35 + r() * 0.25);
+    Object.assign(W.v, { bar: 0.4, count: 120, ...STYLES[pick(r, ['round', 'dot', 'round'])], width: 0.8, base: 0.7, spine: 1, mirror: 0, dual: 0.6, peak: 0, cap: 0, echo: 0,
+      spinSpd: 0, pitch: 0.16 + r() * 0.1, zoom: 1.02, yawAmp: 0.3, yawSpd: 0.25, hzOff: 1, camLive: 0.5 });
+    W.lock = { roll: 0, spin: 0 }; W.lockTall = null;
+    const cream = (ph, p) => ({ a: 1, p, h: 1.3, m: 1, ...L0, k: 7, kw: 1, kp1: ph, kp2: 3.4 + r() * 0.6, n: 150, rs, rw: 1 });
+    W.L = [{ a: 1, p: P_CONE, h: 0.16, m: 0, ...L0, k: 6, kw: 1, kp1: 1, kp2: 6, n: 130, rs, rw: 1 },
+           mix ? cream(PI, FLAVORS.choco) : { a: 1, p: P_CONE, h: 0.16, m: 0, ...L0, k: 6, kw: 1, kp1: -1, kp2: 6, n: 130, rs, rw: 1 },
+           cream(0, mix ? FLAVORS.vanilla : FLAVORS[fl])];
+  }],
+  telescope: [(W, r) => CYL(W, r), (W, r) => {   // 望遠鏡（円柱の10%）：円柱の中をのぞくと、奥に五角形の星
+    Object.assign(W.v, { pitch: 1.4, yawAmp: 0, yawSpd: 0, zoom: 1, fov: 52, camLive: 0.15, spinSpd: W.v.spinSpd * 0.4, fitK: 1, fitW: 0.62, fitH: 0.62, fitCy: -0.1 });
+    W.lock = { roll: 0 }; W.lockTall = null;
+    W.L[0].a = 1; W.L[1] = { ...W.L[1], a: 0 }; W.L[2] = { a: 1, p: pick(r, [6, 4, 2]), h: 1.15, m: 1, ...L0, k: 8, kw: 1, kp1: 0.37, kp2: -0.9, n: 150, rs: sgn(r) * 0.12, rw: 1 };
+  }],
+  infinity: [(W, r) => {   // ∞：チェーンソーのように、音の歯が線にそってゆっくり回る
+    Object.assign(W.v, { kap: 0, poly: 0, sph: 0, mirror: 1, dual: 0, bar: 0.34, count: 100, ...STYLES[pick(r, ['block', 'bar', 'voxel', 'round', 'pillar'])], width: 0.55, base: 0.5, taper: 0,
+      spine: 1, peak: 0, echo: 0, cap: 0, glow: 1, stars: 1, floor: 0, refl: 0, grid: 0, scan: 0, ink: 0, hzOff: 1, zoom: 1, pitch: 0.1, fov: 30, yawAmp: 0.3, yawSpd: 0.25, rollSpd: 0, spinSpd: 0, camLive: 0.5 });
+    W.lock = { yaw: 0, roll: 0, spin: 0, twPh: 0, coilPh: 0 };
+    W.L = [{ a: 1, p: pick(r, [P_STEEL, 0, 1, 2, 3, 6]), h: 1, m: 0, ...L0, k: 5, kw: 1, n: 110 + Math.floor(r() * 30), rs: sgn(r) * (0.28 + r() * 0.12), rw: 1 }, { ...W.L[1], a: 0, ...L0 }, { ...W.L[2], a: 0, ...L0 }];
+    [W.bgKind, W.bg] = darkBg(r);
+  }, (W, r) => { W.v.pitch = 0.4 + r() * 0.25; W.v.yawAmp = 0.7; W.v.zoom = 1.06; W.lock = { roll: 0 }; }],
   tunnel: [(W, r) => {   // 輪の中を進む：過去の輪が手前に流れてくる
     const v = W.v; Object.assign(v, { kap: sgn(r) * PI, poly: r() < 0.4 ? 1 : 0, sides: pick(r, [5, 6, 8]), trail: 1, trailDir: -1, trailDz: 0.1 + r() * 0.06, fly: 1, mirror: r() < 0.5 ? 1 : 0, dual: 0,
       fov: 58 + r() * 14, yawAmp: 0, pitch: 0, rollSpd: sgn(r) * (0.1 + r() * 0.3), echo: 0, camLive: 0.6 });
@@ -1547,7 +1627,7 @@ const FEATURES = {
     [W.bgKind, W.bg] = darkBg(r);
   }, (W, r) => { W.L[1].a = 1; W.L[1].kp2 = 0.92 + r() * 0.1; W.v.zoom = 0.95; W.v.yawAmp = 0.5; W.v.pitch = 0.22 + r() * 0.12; W.winAll = 'layers-long'; }],
 };
-const FEATURE_KEYS = Object.keys(FEATURES);
+const FEATURE_KEYS = Object.keys(FEATURES).filter(k => k !== 'telescope');   // 望遠鏡は円柱の中のレアな回
 // 出る順番：全部を1回ずつシャッフルした並びをつなげる（同じものが続かないように）
 const FEATURE_SEQ = (() => { const r = mulberry(SEED * 13 + 5), seq = [];
   for (let k = 0; k < 60; k++) { const p = shuffle(FEATURE_KEYS.slice(), r); if (seq.length && p[0] === seq[seq.length - 1]) p.push(p.shift()); seq.push(...p); }
@@ -1555,7 +1635,8 @@ const FEATURE_SEQ = (() => { const r = mulberry(SEED * 13 + 5), seq = [];
 function featurePlan(loop) {   // その周の特徴的なグラフィック：Aメロ・サビ・アウトロに1つずつ（富士山は必ず）
   const force = new URLSearchParams(location.search).get('feature');
   const r = mulberry(SEED * 31 + loop * 101 + 7), m = {};
-  const names = force ? force.split(',') : [0, 1, 2].map(k => FEATURE_SEQ[(loop * 3 + k) % FEATURE_SEQ.length]);
+  const r2 = mulberry(SEED * 57 + loop * 3 + 11);
+  const names = force ? force.split(',') : [0, 1, 2].map(k => FEATURE_SEQ[(loop * 3 + k) % FEATURE_SEQ.length]).map(n => n === 'cylinder' && r2() < 0.1 ? 'telescope' : n);
   const place = (name, starts, last) => { if (!FEATURES[name]) return; const len = FEATURES[name].length, ok = starts.filter(b => b + 2 * (len - 1) <= last); const b = pick(r, ok.length ? ok : [starts[0]]);
     for (let k = 0; k < len; k++) m[b + 2 * k] = [name, k]; };
   if (names[0]) place(names[0], [4, 6], 10);            // Aメロ
@@ -1611,8 +1692,8 @@ function wp(i) {
       W.win.cam = [fs, fe]; W.win.lock = [fs, fe];
       W.lock = { yaw: 0, roll: 0, spin: 0, twPh: 0, coilPh: 0 }; W.fujiLock = true;
     } else if (mood === 'dropCam') {   // サビの間の小節：カメラだけ動く（特徴的なグラフィックの間はそのまま）
-      W.feature = P.feature; W.lockTall = P.lockTall; W.tallSwap = P.tallSwap;
-      if (!P.feature || ['dna', 'uni', 'cylinder', 'tornado', 'torus', 'ribbon', 'baran', 'kurage', 'gear', 'saturn'].includes(P.feature)) {
+      W.feature = P.feature; W.lockTall = P.lockTall; W.tallSwap = P.tallSwap; W.carryOut = P.carryOut; W.carried = P.carried;
+      if (!P.feature || ['dna', 'uni', 'cylinder', 'torus', 'ribbon', 'baran', 'kurage', 'gear', 'saturn', 'infinity'].includes(P.feature)) {
         const ms = ['orbit', 'roll', 'zoom', 'tilt', 'flip', 'roll'], n = 1 + (r() < 0.5 ? 1 : 0);
         shuffle(ms, r).slice(0, n).forEach(m => MOVES[m](W, r, MOODS.drop));
       }
@@ -1629,10 +1710,15 @@ function wp(i) {
     } else {   // 基本の変化
       const M = MOODS[mood], order = [];
       W.v.camLive = M.camLive;
-      if (P.feature) { clearFeature(W); order.push('layers', 'shape', 'trail', 'fly', 'coil', 'twist'); }   // 特徴的なグラフィックから、ふつうの形へ
+      const carry = !!(P.feature && P.carryOut);   // 分裂・背中合わせ：その並びのまま次の形へ
+      if (P.feature) { clearFeature(W, carry); order.push('layers', 'shape', 'trail', 'fly', 'coil', 'twist'); }   // 特徴的なグラフィックから、ふつうの形へ
+      if (carry) { W.carried = true; W.tallSwap = P.tallSwap; W.lockTall = P.lockTall; }
+      else if (P.carried) {   // その次の変化で、ゆっくり1つにまとまる
+        W.v.cpW = 0; W.L.forEach(l => Object.assign(l, { ox: 0, oy: 0, sc: 1, rot: 0, us: 0 })); order.push('split', 'layers');
+      }
       const run = m => { MOVES[m](W, r, M); for (const g of MOVE_GROUPS[m]) if (!order.includes(g)) order.push(g); if (m === 'bg' || m === 'color') W.touched.add('color'); };
       for (const f of M.force || []) run(f);
-      const n = pick(r, M.n), w = { ...M.moves }; for (let k = 0; k < n; k++) { const m = W8(r, w); delete w[m]; run(m); }
+      const n = pick(r, M.n), w = { ...M.moves }; if (W.carried) { delete w.layers; delete w.mirror; } for (let k = 0; k < n; k++) { const m = W8(r, w); delete w[m]; run(m); }
       simplify(W);
       const v = W.v;
       if (Math.abs(v.kap) < 0.95 * PI) v.poly = 0;
@@ -1680,6 +1766,7 @@ function blend(F, B, c) {   // F（始まりの状態）から B（目標点）�
   const span = Math.max(1e-3, B.e - B.s), T = stateOf(B);
   const ex = g => { const w = B.win[g]; if (!w || F === T) return 1; const s = B.s + w[0] * span, e = B.s + w[1] * span; return ease((c - s) / Math.max(1e-3, e - s)); };
   const v = {}; for (const g in GROUPS) { const x = ex(g); for (const p of GROUPS[g]) v[p] = lerp(F.v[p] ?? T.v[p], T.v[p], x); }
+  v.cpN = T.v.cpW > 0 ? T.v.cpN : F.v.cpN ?? 1;   // 分裂の数は混ぜない
   const xc = ex('color'), xL = ex('layers');
   const bg = { sky: [0, 1, 2].map(k => mixC3(F.bg.sky[k], T.bg.sky[k], xc)), gnd: [0, 1].map(k => mixC3(F.bg.gnd[k], T.bg.gnd[k], xc)), ink: mixC3(F.bg.ink, T.bg.ink, xc), cap: mixC3(F.bg.cap, T.bg.cap, xc) };
   const L = T.L.map((Lb, j) => { const La = F.L[j], o = { m: Lb.m, mFrom: La.m, mx: La.m === Lb.m ? 0 : xL, c0: mixC3(La.c0, Lb.c0, xc), c1: mixC3(La.c1, Lb.c1, xc) };
@@ -1724,6 +1811,7 @@ function evalQ(c, dt, live) {
     l.rot = (l.rot || 0) + layerAng[j] * (l.rw || 0);
   });
   Q.trailRows = []; for (let k = 1; k <= TMAX; k++) Q.trailRows[k] = rowAt(c - k * TRAIL_DT);
+  if (Q.cpW > 0.001) { Q.cpRows = []; for (let k = 1; k < 16; k++) Q.cpRows[k] = rowAt(c - k * 0.04); }   // 分裂したものは少しずつ遅れて動く（波のように）
   Q.axis = 0;
   // カメラ：いつも少し動いている（手持ちのような）＋ 拍で寄る・揺れる
   const pos = ((c % DUR) + DUR) % DUR, bt = Math.floor(pos / BEAT), ph = pos - bt * BEAT, p = live ? KICKS(Math.floor(bt / 4)) * Math.exp(-ph / 0.1) : 0;
