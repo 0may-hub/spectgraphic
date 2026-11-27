@@ -21,9 +21,11 @@
   /* ---------- 画面 ---------- */
   #stage { flex: 1; min-height: 0; position: relative; display: flex; align-items: center; justify-content: center; }
   #frame { position: relative; overflow: hidden; border-radius: 4px; box-shadow: 0 24px 70px rgba(0,0,0,.55); background: #000; flex: none; }
-  #gl, #capSvg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
-  #capSvg { pointer-events: none; display: none; }
-  #still { position: absolute; inset: 0; width: 100%; height: 100%; display: none; }
+  #gl { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  #frame::after { content: ''; position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; }
+  #frame.shutter::after { animation: shutter .38s ease-out; }
+  @keyframes shutter { 0% { opacity: .75; } 100% { opacity: 0; } }
+  .flyShot { position: fixed; z-index: 60; pointer-events: none; transform-origin: 50% 50%; box-shadow: 0 10px 40px rgba(0,0,0,.5); object-fit: cover; }
 
   /* ---------- 下の操作 ---------- */
   #dock { flex: none; padding: 12px 16px calc(14px + env(safe-area-inset-bottom)); }
@@ -34,22 +36,60 @@
   #prog span { border-top: 2px solid rgba(255,255,255,.16); opacity: .45; transition: opacity .5s; }
   #prog span.on { opacity: 1; }
   #fill { position: absolute; left: 0; top: 10px; width: 100%; height: 2px; background: var(--paper); transform-origin: 0 0; transform: scaleX(0); pointer-events: none; }
-  #playRow { display: flex; align-items: center; gap: 18px; width: min(420px, 100%); }
-  .hint { margin: 0; font-size: 11.5px; letter-spacing: .06em; opacity: .6; line-height: 1.6; white-space: nowrap; flex: 1; }
-  #playRow .hint:first-child { text-align: right; }
-  #stopBtn { width: 78px; height: 78px; border-radius: 50%; border: 3px solid var(--paper); background: rgba(232, 80, 70, .92); color: #fff; font-size: 14px; letter-spacing: .14em; padding: 0 0 0 .14em;
-             box-shadow: 0 0 0 6px rgba(244,241,236,.12), 0 10px 30px rgba(0,0,0,.4); flex: none; }
-  #stopBtn:active { transform: scale(.96); }
+  #playRow { display: flex; align-items: center; gap: 18px; width: min(460px, 100%); }
+  #playRow .side { flex: 1; display: flex; justify-content: flex-end; }
+  .hint { margin: 0; font-size: 11.5px; letter-spacing: .06em; opacity: .6; line-height: 1.6; white-space: nowrap; }
+  #playRow .hint.side { justify-content: flex-start; display: block; }
+  #capBtn, #resumeBtn { width: 90px; height: 90px; border-radius: 50%; border: 3px solid var(--paper); background: rgba(255,255,255,.08); color: #fff; font-size: 11px; letter-spacing: 0; padding: 0; white-space: nowrap;
+             box-shadow: 0 0 0 6px rgba(244,241,236,.12), inset 0 0 0 6px rgba(5,7,15,.55), 0 10px 30px rgba(0,0,0,.4); flex: none; position: relative; }
+  #capBtn::before { content: ''; position: absolute; inset: 9px; border-radius: 50%; background: radial-gradient(circle at 50% 40%, rgba(255,255,255,.95), rgba(236,230,221,.82)); z-index: -1; }
+  #capBtn { color: var(--navy); font-weight: 600; isolation: isolate; }
+  #capBtn:active { transform: scale(.95); }
+  #resumeBtn { display: none; background: var(--paper); color: var(--navy); }
+  body.paused #capBtn { display: none; }
+  body.paused #resumeBtn { display: block; }
+  #zkBtn { display: flex; flex-direction: column; align-items: center; gap: 1px; background: rgba(255,255,255,.06); border: 1px solid var(--line); border-radius: 14px; padding: 7px 12px 6px; min-width: 66px; position: relative; }
+  #zkBtn b { font-size: 11.5px; letter-spacing: .12em; font-weight: 600; }
+  #zkBtn small { font-size: 10px; opacity: .65; letter-spacing: .04em; }
+  #zkBtn.hasNew::after { content: ''; position: absolute; top: -3px; right: -3px; width: 10px; height: 10px; border-radius: 50%; background: #ffd66b; box-shadow: 0 0 10px #ffd66b; }
+  #zkBtn.bump { animation: bump .5s cubic-bezier(.3,1.6,.5,1); }
+  @keyframes bump { 0% { transform: scale(1); } 35% { transform: scale(1.22); box-shadow: 0 0 24px rgba(255,214,107,.6); } 100% { transform: scale(1); } }
 
-  #sheet { display: none; width: min(560px, 100%); margin: 0 auto; }
-  body.stopped #play { display: none; }
-  body.stopped #sheet { display: block; }
-  .shead { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 9px; }
-  .shead b { font-size: 15px; letter-spacing: .14em; font-weight: 600; }
-  .shead small { font-size: 11px; opacity: .6; letter-spacing: .04em; }
+  /* ---------- 図鑑（うしろの音とビジュアルは動いたまま） ---------- */
+  #zukan { position: fixed; inset: 0; z-index: 25; display: none; align-items: flex-end; justify-content: center; background: linear-gradient(to bottom, rgba(3,5,12,0), rgba(3,5,12,.55) 30%); }
+  #zukan.show { display: flex; }
+  #zukan .zbox { width: min(760px, 100%); height: min(80vh, 100%); height: min(80dvh, 100%); background: rgba(7,10,22,.84); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+                 border: 1px solid var(--line); border-bottom: 0; border-radius: 20px 20px 0 0; display: flex; flex-direction: column; animation: zup .32s cubic-bezier(.2,.9,.3,1); }
+  @keyframes zup { from { transform: translateY(40px); opacity: 0; } to { transform: none; opacity: 1; } }
+  #zukan .zh { display: flex; align-items: center; gap: 12px; padding: 14px 18px 10px; border-bottom: 1px solid var(--line); }
+  #zukan .zh b { font-size: 15px; letter-spacing: .2em; font-weight: 600; }
+  #zukan .zh small { opacity: .65; font-size: 12px; letter-spacing: .06em; }
+  #zukan .zh .sp { flex: 1; }
+  #zkClose { width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--line); background: none; font-size: 18px; line-height: 1; }
+  #zkBody { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 4px 18px calc(18px + env(safe-area-inset-bottom)); }
+  #zkGrid h3 { font-size: 12.5px; letter-spacing: .16em; font-weight: 600; margin: 16px 0 8px; display: flex; align-items: baseline; gap: 10px; }
+  #zkGrid h3 small { font-weight: 400; opacity: .55; font-size: 11px; letter-spacing: .04em; }
+  .zg { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 8px; }
+  .zt { position: relative; aspect-ratio: 1; border: 1px solid rgba(255,255,255,.08); border-radius: 10px; overflow: hidden; padding: 0; background: radial-gradient(circle at 50% 35%, #141a33, #080b17);
+        display: flex; align-items: center; justify-content: center; }
+  .zt[disabled] { opacity: 1; cursor: default; }
+  .zt span { font-size: 11px; letter-spacing: .04em; line-height: 1.4; padding: 0 6px; text-align: center; opacity: .42; }
+  .zt.got span { position: absolute; left: 0; right: 0; bottom: 0; padding: 14px 6px 5px; opacity: 1; background: linear-gradient(to top, rgba(0,0,0,.75), rgba(0,0,0,0)); text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .zt img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .zt.new { border-color: #ffd66b; box-shadow: 0 0 0 1px #ffd66b inset, 0 0 16px rgba(255,214,107,.35); }
+  .zt.new::after { content: 'NEW'; position: absolute; top: 5px; left: 5px; font-size: 9px; letter-spacing: .1em; font-weight: 700; color: var(--navy); background: #ffd66b; border-radius: 999px; padding: 1px 6px; }
+  .zEmpty { font-size: 12px; opacity: .5; margin: 0 0 8px; }
+  #zkDetail { display: none; padding-top: 12px; }
+  #zukan.detail #zkGrid { display: none; }
+  #zukan.detail #zkDetail { display: block; }
+  #zdBack { padding: 7px 14px; font-size: 12.5px; }
+  #zdImg { display: block; max-width: 100%; max-height: 46vh; margin: 12px auto 8px; border-radius: 8px; box-shadow: 0 10px 40px rgba(0,0,0,.5); }
+  .zdCap { text-align: center; margin-bottom: 10px; }
+  .zdCap b { font-size: 15px; letter-spacing: .12em; font-weight: 600; display: block; }
+  .zdCap small { font-size: 11px; opacity: .55; letter-spacing: .04em; }
   #title { width: 100%; font: inherit; font-size: 16px; padding: 11px 14px; border-radius: 10px; border: 1px solid var(--line); background: rgba(255,255,255,.06); color: var(--ink); }
-  #title::placeholder { color: rgba(236,230,221,.4); }
-  .btns { display: grid; grid-template-columns: 1.3fr 1fr 1fr; gap: 8px; margin-top: 10px; }
+  #title::placeholder { color: rgba(236,230,221,.4); font-size: 13px; }
+  .btns { display: grid; grid-template-columns: 1.3fr 1fr; gap: 8px; margin-top: 10px; }
   .btns button { padding: 12px 6px; font-size: 14px; }
   .primary { background: var(--paper); color: var(--navy); border: none; border-radius: 999px; padding: 11px 22px; font-size: 14px; letter-spacing: .08em; box-shadow: 0 6px 24px rgba(0,0,0,.3); }
   .ghost { background: rgba(9,15,38,.5); border: 1px solid rgba(255,255,255,.3); border-radius: 999px; padding: 10px 18px; font-size: 13px; letter-spacing: .06em; }
@@ -72,7 +112,7 @@
   #startOverlay p { font-size: 13px; line-height: 1.95; opacity: .88; margin: 0 0 24px; letter-spacing: .05em; }
   #startOverlay p small { display: block; opacity: .7; font-size: 11.5px; margin-top: 6px; }
   .picks { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
-  .songPick { background: var(--paper); color: var(--navy); border: none; border-radius: 16px; padding: 14px 26px; min-width: 150px; box-shadow: 0 6px 24px rgba(0,0,0,.3); }
+  .songPick { background: var(--paper); color: var(--navy); border: none; border-radius: 16px; padding: 14px 12px; width: 168px; box-shadow: 0 6px 24px rgba(0,0,0,.3); }
   .songPick b { display: block; font-size: 17px; letter-spacing: .2em; font-weight: 600; }
   .songPick small { display: block; font-size: 10.5px; letter-spacing: .08em; opacity: .65; margin-top: 3px; }
   .songPick[data-song="hoshi"] { background: linear-gradient(160deg, #1a2350, #0b1030); color: var(--ink); border: 1px solid rgba(255,255,255,.35); }
@@ -99,17 +139,14 @@
     header { grid-column: 1 / -1; height: 40px; }
     #stage { grid-row: 2; grid-column: 1; padding-left: env(safe-area-inset-left); }
     #dock { grid-row: 2; grid-column: 2; display: flex; align-items: center; padding: 6px calc(14px + env(safe-area-inset-right)) 10px 4px; }
-    #play, #sheet { width: 100%; }
+    #play { width: 100%; }
     #playRow { flex-direction: column; gap: 10px; width: 100%; }
     #playRow .hint, #playRow .hint:first-child { text-align: center; flex: none; }
     #playRow .hint br { display: none; }
     #prog span { color: transparent; }
     #prog span.on { color: inherit; overflow: visible; }
-    .shead small { display: none; }
-    .btns { grid-template-columns: 1fr 1fr; }
-    .btns #sSave { grid-column: 1 / -1; }
-    .btns button { padding: 10px 6px; }
-    #title { padding: 9px 12px; }
+    #zukan .zbox { height: 100%; border-radius: 0; }
+    #zdImg { max-height: 38vh; }
   }
 
   /* ---------- ギャラリー ---------- */
@@ -155,8 +192,6 @@
 <main id="stage">
   <div id="frame">
     <canvas id="gl"></canvas>
-    <svg id="capSvg" xmlns="http://www.w3.org/2000/svg"></svg>
-    <img id="still" alt="できあがった作品">
   </div>
 </main>
 
@@ -164,24 +199,37 @@
   <div id="play">
     <div id="prog" title="押すと、そのパートの最初にもどります"><i id="fill"></i></div>
     <div id="playRow">
-      <p class="hint">音楽に合わせて<br>つくっています</p>
-      <button id="stopBtn">とめる</button>
-      <p class="hint">好きな瞬間で<br>とめてください</p>
+      <div class="side"><button id="zkBtn" aria-label="図鑑をひらく"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M4 5.5C4 4.7 4.7 4 5.5 4H11v15H5.5A1.5 1.5 0 0 1 4 17.5zM13 4h5.5c.8 0 1.5.7 1.5 1.5v12c0 .8-.7 1.5-1.5 1.5H13z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg><b>図鑑</b><small id="zkCount">0/0</small></button></div>
+      <button id="capBtn">キャプチャー</button>
+      <button id="resumeBtn">つづける</button>
+      <p class="hint side">形をキャプチャーして<br>図鑑をうめよう</p>
     </div>
   </div>
-  <div id="sheet">
-    <div class="shead"><b>この瞬間で完成！</b><small>タイトルは画像の左下に入ります</small></div>
-    <input id="title" maxlength="24" placeholder="タイトル（なしでもOK）" enterkeyhint="done" autocomplete="off">
-    <div class="btns">
-      <button class="primary" id="sSave">保存</button>
-      <button class="ghost" id="sPost">投稿</button>
-      <button class="ghost" id="sCont">続きから</button>
+</div>
+
+<div id="zukan">
+  <div class="zbox">
+    <div class="zh"><b>図鑑</b><small id="zkHead"></small><span class="sp"></span><button id="zkClose" aria-label="閉じる">×</button></div>
+    <div id="zkBody">
+      <div id="zkGrid"></div>
+      <div id="zkDetail">
+        <button class="ghost" id="zdBack">‹ 図鑑にもどる</button>
+        <img id="zdImg" alt="">
+        <div class="zdCap"><b id="zdName"></b><small id="zdDate"></small></div>
+        <div id="sheet">
+          <input id="title" maxlength="24" placeholder="タイトル（なしでもOK・画像の左下に入ります）" enterkeyhint="done" autocomplete="off">
+          <div class="btns">
+            <button class="primary" id="sSave">保存</button>
+            <button class="ghost" id="sPost">投稿</button>
+          </div>
+          <div id="postAsk">
+            <p>この作品を「みんなの作品」ギャラリーに公開しますか？<small id="postTitle"></small><small>公開した作品は、会場やほかの人のスマホからも見られます</small></p>
+            <div class="btns2"><button class="primary" id="pYes">公開する</button><button class="ghost" id="pNo">やめる</button></div>
+          </div>
+          <p class="note" id="sNote"></p>
+        </div>
+      </div>
     </div>
-    <div id="postAsk">
-      <p>この作品を「みんなの作品」ギャラリーに公開しますか？<small id="postTitle"></small><small>公開した作品は、会場やほかの人のスマホからも見られます</small></p>
-      <div class="btns2"><button class="primary" id="pYes">公開する</button><button class="ghost" id="pNo">やめる</button></div>
-    </div>
-    <p class="note" id="sNote"></p>
   </div>
 </div>
 
@@ -189,7 +237,7 @@
   <div class="box">
     <h1>AudioSpectGraphic</h1>
     <h2>音からビジュアルをつくる</h2>
-    <p>音楽に合わせて、音のスペクトラム（低い音から高い音までの大きさ）が<br>形を変えつづけ、ビジュアルが自動でつくられていきます。同じ絵は二度と出ません。<br>曲を選んでください。<small>※ 音が出ます</small></p>
+    <p>音楽に合わせて、音のスペクトラム（低い音から高い音までの大きさ）が<br>形を変えつづけ、ビジュアルが自動でつくられていきます。同じ絵は二度と出ません。<br>いろいろな形を「キャプチャー」して、図鑑をうめましょう。<br>図鑑から、タイトルを付けて保存・投稿できます。曲を選んでください。<small>※ 音が出ます</small></p>
     <div class="picks">
       <button class="songPick" data-song="fuji" disabled><b>富士山</b><small>シンセウェイブ・112BPM</small></button>
       <button class="songPick" data-song="hoshi" disabled><b>星座</b><small>星空・96BPM</small></button>
@@ -1632,7 +1680,7 @@ const FEATURES = {
   tornado: [(W, r) => { Object.assign(W.v, { sph: 1, sphF: 2, squash: 1, sphTurns: 5 + r() * 3, bar: 0.5 + r() * 0.2, count: 110 + Math.floor(r() * 40), spine: 1, mirror: 0, dual: 0,
     spinSpd: sgn(r) * (0.5 + r() * 0.4), pitch: 0.25 + r() * 0.3, zoom: 1.05, yawAmp: 0.3, yawSpd: 0.3, hzOff: 1, camLive: 0.8, ...STYLES[pick(r, ['thin', 'dot', 'beam'])] }); W.v.width = Math.min(W.v.width, 0.5); },
   (W, r) => {   // 竜巻が、ソフトクリームに：格子もようのコーン＋上にいくほど細いらせんのクリーム（フレーバーごとに色）
-    const fl = W8(r, { vanilla: 1, choco: 1, strawberry: 1, matcha: 1, mix: 1 }), mix = fl === 'mix', rs = sgn(r) * (0.35 + r() * 0.25);
+    const fl = W8(r, { vanilla: 1, choco: 1, strawberry: 1, matcha: 1, mix: 1 }), mix = fl === 'mix'; W.flavor = fl; const rs = sgn(r) * (0.35 + r() * 0.25);
     Object.assign(W.v, { bar: 0.4, count: 120, ...STYLES[pick(r, ['round', 'dot', 'round'])], width: 0.8, base: 0.7, spine: 1, mirror: 0, dual: 0.6, peak: 0, cap: 0, echo: 0,
       spinSpd: 0, pitch: 0.16 + r() * 0.1, zoom: 1.02, yawAmp: 0.3, yawSpd: 0.25, hzOff: 1, camLive: 0.5 });
     W.lock = { roll: 0, spin: 0 }; W.lockTall = null;
@@ -1871,7 +1919,7 @@ function wp(i) {
       W.win.cam = [fs, fe]; W.win.lock = [fs, fe];
       W.lock = { yaw: 0, roll: 0, spin: 0, twPh: 0, coilPh: 0 }; W.motifT = motifAbs(i); W.scene = 'cons'; W.cons = id;
     } else if (mood === 'dropCam') {   // サビの間の小節：カメラだけ動く（特徴的なグラフィックの間はそのまま）
-      W.feature = P.feature; W.lockTall = P.lockTall; W.tallSwap = P.tallSwap; W.carryOut = P.carryOut; W.carried = P.carried;
+      W.feature = P.feature; W.fstep = P.fstep; W.flavor = P.flavor; W.lockTall = P.lockTall; W.tallSwap = P.tallSwap; W.carryOut = P.carryOut; W.carried = P.carried;
       if (!P.feature || ['dna', 'uni', 'cylinder', 'torus', 'ribbon', 'baran', 'kurage', 'gear', 'saturn', 'infinity', 'aurora', 'crown'].includes(P.feature)) {
         const ms = ['orbit', 'roll', 'zoom', 'tilt', 'flip', 'roll'], n = 1 + (r() < 0.5 ? 1 : 0);
         shuffle(ms, r).slice(0, n).forEach(m => MOVES[m](W, r, moodOf('drop')));
@@ -1879,7 +1927,7 @@ function wp(i) {
       stagger(W, P, ['cam'], r, 0.3);
     } else if (FP[bar]) {   // 特徴的なグラフィック
       const [name, k] = FP[bar];
-      W.feature = name;
+      W.feature = name; W.fstep = k;
       if (k === 0) { if (!P.feature || P.feature !== name) clearFeature(W); }
       else { W.lockTall = P.lockTall; W.tallSwap = P.tallSwap; }
       FEATURES[name][k](W, r);
@@ -2052,24 +2100,23 @@ const cv = $('gl');
 let E = null;
 try { E = engInit(cv); } catch (e) { console.error(e); E = null; }
 cv.addEventListener('webglcontextlost', e => { e.preventDefault(); E = null; });
-cv.addEventListener('webglcontextrestored', () => { try { E = engInit(cv); histN = 0; if (frozen) drawFrozen(); } catch (e) {} });
+cv.addEventListener('webglcontextrestored', () => { try { E = engInit(cv); histN = 0; } catch (e) {} });
 let curAspect = viewAspect(), lastQ = null, scaleLv = 0;
 const SCALES = [1, 0.8, 0.66, 0.5];
 function viewAspect() { return innerHeight > innerWidth * 1.05 ? 'tall' : 'wide'; }
 function fit() {
-  const A = ASPECTS[frozen ? frozen.aspect : curAspect], r = $('stage').getBoundingClientRect();
+  const A = ASPECTS[curAspect], r = $('stage').getBoundingClientRect();
   const k = Math.max(0.01, Math.min((r.width - 24) / A.w, (r.height - 6) / A.h));
   $('frame').style.width = Math.round(A.w * k) + 'px'; $('frame').style.height = Math.round(A.h * k) + 'px';
   sizeCanvas();
-  if (stopped && frozen) drawFrozen();
 }
 function sizeCanvas() {
-  const A = ASPECTS[frozen ? frozen.aspect : curAspect], fw = parseFloat($('frame').style.width) || 300;
+  const A = ASPECTS[curAspect], fw = parseFloat($('frame').style.width) || 300;
   const d = Math.min(devicePixelRatio || 1, 2) * SCALES[scaleLv], w = Math.max(64, Math.round(fw * d)), h = Math.round(w * A.h / A.w);
   if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
 }
 new ResizeObserver(fit).observe($('stage'));
-addEventListener('resize', () => { const a = viewAspect(); if (a !== curAspect && !stopped) { curAspect = a; fit(); } });
+addEventListener('resize', () => { const a = viewAspect(); if (a !== curAspect) { curAspect = a; fit(); } });
 
 // 曲の進みぐあい。押すと、そのパートの最初へ
 let progSpans = [];
@@ -2144,11 +2191,10 @@ function frame(now) {
 }
 
 // =====================================================
-//  はじめる・とめる・続きから
+//  はじめる・キャプチャー・図鑑（音とビジュアルは止まらない）
 // =====================================================
 function play() {
-  stopped = false; frozen = null; document.body.classList.remove('stopped', 'intro'); document.body.classList.add('playing');
-  $('still').style.display = 'none'; $('capSvg').style.display = 'none'; $('sheet').classList.remove('asking');
+  stopped = false; document.body.classList.remove('intro', 'paused'); document.body.classList.add('playing');
   if (actx.state !== 'running') actx.resume().catch(() => {});   // iPhoneで画面を切りかえたあとなど
   startAudio(); playing = true; lastRender = 0; adaptAt = performance.now() / 1000;
   requestAnimationFrame(fit);
@@ -2161,100 +2207,162 @@ document.querySelectorAll('.songPick').forEach(b => b.addEventListener('click', 
   useSong(key); clockBase = 0; tc = 0;
   play();
 }));
-let frozen = null;
-function stop() {
-  if (!playing || !lastQ) return;
-  stopAudio(); playing = false; stopped = true;
-  frozen = { aspect: curAspect, Q: lastQ };
-  document.body.classList.remove('playing'); document.body.classList.add('stopped');
-  stillBlob = null; posted = null; $('sPost').textContent = '投稿'; setNote('');
-  showCaption(); requestAnimationFrame(() => { fit(); makeStill(); });
-}
-function drawFrozen() { if (E && frozen) { sizeCanvas(); engRender(E, frozen.Q, cv.width, cv.height, null); } }
-$('stopBtn').addEventListener('click', stop);
-addEventListener('keydown', e => {   // パソコン：スペースキーでもとめられる
-  if (e.key === ' ' && playing && !/INPUT|TEXTAREA|BUTTON/.test(document.activeElement.tagName)) { e.preventDefault(); stop(); }
-});
-$('sCont').addEventListener('click', () => {
-  stillGen++;
-  if (viewAspect() !== curAspect) curAspect = viewAspect();
-  play();
-});
-document.addEventListener('visibilitychange', () => { if (document.hidden && playing) stop(); });   // ほかのアプリに切りかえたら、その瞬間でとめておく
+// ほかのアプリに切りかえたら一時停止。もどったら「つづける」
+document.addEventListener('visibilitychange', () => { if (document.hidden && playing) { stopAudio(); playing = false; document.body.classList.add('paused'); } });
+$('resumeBtn').addEventListener('click', () => { if (viewAspect() !== curAspect) curAspect = viewAspect(); play(); });
 
+// ---------- 図鑑：欄（暗くて名前だけ）→ キャプチャーすると画像で埋まる ----------
+const ZK_GROUPS = [
+  { n: '富士山', items: [['fuji', '富士山'], ['fuji_hidden', 'かくれた富士']] },
+  { n: '星座', items: CONS_KEYS.map(k => ['cons:' + k, MOTIFS[k].n]) },
+  { n: '特徴的なグラフィック', items: [['dna', 'DNA'], ['hanabi', '花火'], ['kami', '噛み合わせ'], ['uni', 'うに'], ['cylinder', '円柱のらせん'], ['tornado', '竜巻'], ['tunnel', 'トンネル'], ['terrain', '山脈'],
+    ['torus', '輪の螺旋'], ['ribbon', 'リボン'], ['baran', 'バラン'], ['kurage', 'クラゲ'], ['fish', '魚'], ['gear', '歯車'], ['saturn', '土星'], ['infinity', '∞（無限）'], ['aurora', 'オーロラ'], ['crown', '王冠']] },
+  { n: '派生とレア', items: [['telescope', '望遠鏡'], ['sailfish', 'バショウカジキ'], ['oarfish', 'リュウグウノツカイ'], ['uni16', 'うに16個'], ['cream_vanilla', 'ソフトクリーム（バニラ）'],
+    ['cream_choco', 'ソフトクリーム（チョコ）'], ['cream_strawberry', 'ソフトクリーム（いちご）'], ['cream_matcha', 'ソフトクリーム（抹茶）'], ['cream_mix', 'ソフトクリーム（ミックス）']] },
+];
+const ZK_NAME = Object.fromEntries(ZK_GROUPS.flatMap(g => g.items)), ZK_TOTAL = Object.keys(ZK_NAME).length, OTHER_MAX = 12;
+const ZK = new Map();   // id → { id, full, thumb, aspect, ink, at, song, seen }
+const urlOf = new Map();
+const thumbURL = rec => { let u = urlOf.get(rec.thumb); if (!u) { u = URL.createObjectURL(rec.thumb); urlOf.set(rec.thumb, u); } return u; };
+// 端末に保存（IndexedDB）。使えないときは、開いている間だけ
+let zkDB = null;
+const idb = () => new Promise(res => { try { const q = indexedDB.open('asg-zukan', 1); q.onupgradeneeded = () => q.result.createObjectStore('shots', { keyPath: 'id' }); q.onsuccess = () => res(q.result); q.onerror = () => res(null); } catch (e) { res(null); } });
+const tx = (mode, fn) => new Promise(res => { if (!zkDB) return res(null); try { const t = zkDB.transaction('shots', mode), st = t.objectStore('shots'), q = fn(st); t.oncomplete = () => res(q && q.result); t.onerror = () => res(null); } catch (e) { res(null); } });
+async function zkLoad() { zkDB = await idb(); const all = (await tx('readonly', st => st.getAll())) || []; for (const r of all) ZK.set(r.id, r); zkCount(); }
+function zkCount() { const n = [...ZK.keys()].filter(k => ZK_NAME[k]).length; $('zkCount').textContent = `${n}/${ZK_TOTAL}`; $('zkHead').textContent = `${n} / ${ZK_TOTAL}`; $('zkBtn').classList.toggle('hasNew', [...ZK.values()].some(r => !r.seen)); }
+// いま画面にあるのは何の形か
+function subjectAt(c, Q) {
+  if (Q.motif) { const { id, d } = Q.motif; if (id === 'fuji') { if (d >= -0.02 && d < 0.45) return 'fuji_hidden'; } else if (d >= -0.02 && d < 1.0) return 'cons:' + id; }
+  const B = wp(tc), A = tc > 0 ? wp(tc - 1) : null, x = clamp((c - B.s) / Math.max(1e-3, B.e - B.s)), W = x >= 0.5 || !A ? B : A;
+  if (W.scene === 'fuji' && (W !== B || x > 0.6)) return 'fuji';
+  const f = W.feature; if (!f) return null;
+  if (f === 'tornado' && W.fstep === 1) return 'cream_' + W.flavor;
+  if (f === 'telescope') return W.fstep === 1 ? 'telescope' : 'cylinder';
+  if (f === 'sailfish' || f === 'oarfish') return W.fstep === 1 ? f : 'fish';
+  if (f === 'uni' && (Q.cpW || 0) > 0.5 && Q.cpN >= 16 && (Q.cpPh ?? 1) > 0.5) return 'uni16';
+  return ZK_NAME[f] ? f : null;
+}
+const toBlob = (c, type, q) => new Promise((res, rej) => c.toBlob(b => b ? res(b) : rej(new Error('img')), type, q));
+function scaled(src, long) { const k = Math.min(1, long / Math.max(src.width, src.height)), c = document.createElement('canvas'); c.width = Math.round(src.width * k); c.height = Math.round(src.height * k);
+  const g = c.getContext('2d'); g.imageSmoothingQuality = 'high'; g.drawImage(src, 0, 0, c.width, c.height); return c; }
+let capBusy = false;
+async function capture() {
+  if (!playing || !lastQ || !E || capBusy) return;
+  capBusy = true;
+  const Q = lastQ, aspect = curAspect, A = ASPECTS[aspect], sid = subjectAt(clockNow(), Q);
+  $('frame').classList.remove('shutter'); void $('frame').offsetWidth; $('frame').classList.add('shutter');
+  try {
+    let c = null;
+    for (const sc of touchy ? [1.5, 1] : [2, 1.5, 1]) { try { c = engSnapshot(E, Q, Math.round(A.w * sc), Math.round(A.h * sc)); break; } catch (e) { c = null; } }   // スマホは少し小さめ（止まって見えないように）
+    if (!c) throw new Error('snap');
+    const tc2 = scaled(c, 420);
+    flyToZukan(tc2.toDataURL('image/jpeg', 0.8));
+    const [full, thumb] = await Promise.all([toBlob(c, 'image/jpeg', 0.92), toBlob(tc2, 'image/jpeg', 0.84)]);
+    const id = sid || 'other:' + Date.now(), had = ZK.has(id);
+    const rec = { id, full, thumb, aspect, ink: toHex(Q.bgc.ink.map(v => v * 255)), at: Date.now(), song: SG.key, seen: false };
+    const old = ZK.get(id); if (old && urlOf.has(old.thumb)) { URL.revokeObjectURL(urlOf.get(old.thumb)); urlOf.delete(old.thumb); }
+    ZK.set(id, rec); await tx('readwrite', st => st.put(rec));
+    if (!sid) {   // 「その他」は新しい12枚まで
+      const others = [...ZK.values()].filter(r => !ZK_NAME[r.id]).sort((a, b) => b.at - a.at);
+      for (const r of others.slice(OTHER_MAX)) { ZK.delete(r.id); await tx('readwrite', st => st.delete(r.id)); }
+    }
+    setTimeout(() => { zkCount(); $('zkBtn').classList.remove('bump'); void $('zkBtn').offsetWidth; $('zkBtn').classList.add('bump');
+      toast(!sid ? '「その他」に入りました' : had ? `「${ZK_NAME[id]}」の写真を新しくしました` : `図鑑に「${ZK_NAME[id]}」が入りました！`);
+      if ($('zukan').classList.contains('show')) renderZukan(); }, 560);
+  } catch (e) { toast('キャプチャーできませんでした。もう一度お試しください'); }
+  capBusy = false;
+}
+function flyToZukan(src) {   // 撮った画像が、図鑑のボタンへ吸いこまれる
+  const fr = $('frame').getBoundingClientRect(), br = $('zkBtn').getBoundingClientRect(), im = document.createElement('img');
+  im.src = src; im.className = 'flyShot'; Object.assign(im.style, { left: fr.left + 'px', top: fr.top + 'px', width: fr.width + 'px', height: fr.height + 'px' });
+  document.body.appendChild(im);
+  const dx = br.left + br.width / 2 - (fr.left + fr.width / 2), dy = br.top + br.height / 2 - (fr.top + fr.height / 2), k = Math.max(0.04, br.width / fr.width * 0.7);
+  const an = im.animate([
+    { transform: 'translate(0,0) scale(1) rotate(0deg)', opacity: 1, borderRadius: '4px' },
+    { transform: `translate(${dx * 0.18}px, ${dy * 0.05 - 24}px) scale(0.62) rotate(-4deg)`, opacity: 1, offset: 0.35, borderRadius: '8px' },
+    { transform: `translate(${dx}px, ${dy}px) scale(${k}) rotate(-14deg)`, opacity: 0.25, borderRadius: '50%' },
+  ], { duration: 620, easing: 'cubic-bezier(.45,0,.85,.35)' });
+  an.onfinish = () => im.remove();
+}
+$('capBtn').addEventListener('click', capture);
+addEventListener('keydown', e => {   // パソコン：スペースキーでもキャプチャー
+  if (e.key === ' ' && playing && !$('zukan').classList.contains('show') && !/INPUT|TEXTAREA|BUTTON/.test(document.activeElement.tagName)) { e.preventDefault(); capture(); }
+});
+// ---------- 図鑑を開く（音とビジュアルは動いたまま） ----------
+function renderZukan() {
+  const box = $('zkGrid'); box.innerHTML = '';
+  const tileOf = (id, name) => {
+    const rec = ZK.get(id), b = document.createElement('button'); b.className = 'zt' + (rec ? ' got' : '') + (rec && !rec.seen ? ' new' : '');
+    if (rec) { const im = document.createElement('img'); im.src = thumbURL(rec); im.alt = name; b.appendChild(im); b.addEventListener('click', () => openShot(id)); }
+    else b.disabled = true;
+    const t = document.createElement('span'); t.textContent = name; b.appendChild(t); return b;
+  };
+  for (const g of ZK_GROUPS) {
+    const n = g.items.filter(([id]) => ZK.has(id)).length, h = document.createElement('h3'); h.innerHTML = `${esc(g.n)}<small>${n} / ${g.items.length}</small>`; box.appendChild(h);
+    const grid = document.createElement('div'); grid.className = 'zg'; g.items.forEach(([id, name]) => grid.appendChild(tileOf(id, name))); box.appendChild(grid);
+  }
+  const others = [...ZK.values()].filter(r => !ZK_NAME[r.id]).sort((a, b) => b.at - a.at), h = document.createElement('h3');
+  h.innerHTML = `その他<small>図鑑にない瞬間（新しい${OTHER_MAX}枚まで）</small>`; box.appendChild(h);
+  const grid = document.createElement('div'); grid.className = 'zg';
+  if (!others.length) { const p = document.createElement('p'); p.className = 'zEmpty'; p.textContent = 'まだありません'; box.appendChild(p); }
+  others.forEach(r => grid.appendChild(tileOf(r.id, new Date(r.at).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })))); box.appendChild(grid);
+}
+function openZukan() { renderZukan(); $('zukan').classList.add('show'); $('zukan').classList.remove('detail'); $('zkBody').scrollTop = 0; }
+function closeZukan() { $('zukan').classList.remove('show', 'detail'); cur = null; }
+$('zkBtn').addEventListener('click', openZukan);
+$('zkClose').addEventListener('click', closeZukan);
+$('zukan').addEventListener('click', e => { if (e.target.id === 'zukan') closeZukan(); });
+
+// ---------- 埋まった欄：タイトルを付けて保存・投稿 ----------
+let cur = null, stillBlob = null, stillURL = null, stillTitle = null, posted = null, fullURL = null;
+async function openShot(id) {
+  const rec = ZK.get(id); if (!rec) return;
+  cur = rec; stillBlob = null; stillTitle = null; posted = null;
+  if (!rec.seen) { rec.seen = true; tx('readwrite', st => st.put(rec)); zkCount(); }
+  if (fullURL) URL.revokeObjectURL(fullURL); fullURL = URL.createObjectURL(rec.full);
+  $('zdImg').src = fullURL; $('zdName').textContent = ZK_NAME[id] || 'その他';
+  $('zdDate').textContent = new Date(rec.at).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) + (rec.song === 'hoshi' ? '・星座の曲' : '・富士山の曲');
+  $('title').value = ''; $('sPost').textContent = '投稿'; setNote(''); $('sheet').classList.remove('asking');
+  $('zukan').classList.add('detail'); $('zkBody').scrollTop = 0;
+}
+$('zdBack').addEventListener('click', () => { $('zukan').classList.remove('detail'); cur = null; renderZukan(); });
 // ---------- タイトル（画像の左下） ----------
 const CAP_FONT = 'Hiragino Sans, Yu Gothic, sans-serif';
-const capInk = fz => toHex(fz.Q.bgc.ink.map(v => v * 255));
-function captionSvg(fz, title, size) {
-  const A = ASPECTS[fz.aspect], W = A.w, H = A.h, u = H / 1000, f = v => +(+v).toFixed(2);
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}"${size ? ` width="${W}" height="${H}"` : ''}><text x="${f(W * 0.04)}" y="${f(H - 36 * u)}" fill="${capInk(fz)}" font-family="${CAP_FONT}" font-size="${f(26 * u)}" font-weight="600" letter-spacing="${f(3 * u)}">${esc(title)}</text></svg>`;
+function captionSvg(aspect, ink, title, size) {
+  const A = ASPECTS[aspect], W = A.w, H = A.h, u = H / 1000, f = v => +(+v).toFixed(2);
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}"${size ? ` width="${W}" height="${H}"` : ''}><text x="${f(W * 0.04)}" y="${f(H - 36 * u)}" fill="${ink}" font-family="${CAP_FONT}" font-size="${f(26 * u)}" font-weight="600" letter-spacing="${f(3 * u)}">${esc(title)}</text></svg>`;
 }
-function showCaption() {
-  const t = $('title').value.trim(), cs = $('capSvg');
-  if (!frozen || !t) { cs.style.display = 'none'; return; }
-  const A = ASPECTS[frozen.aspect], inner = captionSvg(frozen, t, false);
-  cs.setAttribute('viewBox', `0 0 ${A.w} ${A.h}`); cs.innerHTML = inner.slice(inner.indexOf('>') + 1, inner.lastIndexOf('</svg>'));
-  cs.style.display = $('still').style.display === 'block' ? 'none' : 'block';
-}
-let titleT = 0;
-$('title').addEventListener('input', () => {
-  stillGen++; stillBlob = null; posted = null; $('sPost').textContent = '投稿';
-  $('still').style.display = 'none'; showCaption();
-  clearTimeout(titleT); titleT = setTimeout(makeStill, 450);
-});
-$('title').addEventListener('keydown', e => { if (e.key === 'Enter') e.target.blur(); });
-
-// ---------- 画像にする（とめた状態を、2倍の大きさで描きなおす） ----------
-let stillGen = 0, stillBlob = null, stillTitle = null, stillURL = null, snapCache = null;
 function svgToImage(svg) {
   const url = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }));
   const img = new Image(); img.src = url;
   return img.decode().then(() => img).finally(() => setTimeout(() => URL.revokeObjectURL(url), 1000));
 }
-function snapshot(fz) {   // 同じ状態の絵は1回だけ描く（タイトルを変えても使いまわす）
-  if (snapCache && snapCache.fz === fz) return snapCache.c;
-  const A = ASPECTS[fz.aspect];
-  let c = null;
-  for (const sc of [2, 1.5, 1]) { try { c = engSnapshot(E, fz.Q, Math.round(A.w * sc), Math.round(A.h * sc)); break; } catch (e) { c = null; } }
-  if (!c) throw new Error('snapshot');
-  drawFrozen();
-  snapCache = { fz, c };
-  return c;
-}
-async function composeBlob(fz, title) {
-  const base = snapshot(fz), W = base.width, H = base.height, A = ASPECTS[fz.aspect];
+async function composeBlob(rec, title) {   // 撮った画像＋タイトル → PNG
+  const base = new Image(); base.src = URL.createObjectURL(rec.full); await base.decode();
+  const W = base.naturalWidth, H = base.naturalHeight, A = ASPECTS[rec.aspect];
   const c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d');
-  g.drawImage(base, 0, 0);
-  if (title) g.drawImage(await svgToImage(captionSvg(fz, title, true).replace(`width="${A.w}" height="${A.h}"`, `width="${W}" height="${H}"`)), 0, 0, W, H);
-  return await new Promise((res, rej) => c.toBlob(b => b ? res(b) : rej(new Error('png')), 'image/png'));
-}
-async function makeStill() {
-  if (!frozen) return null;
-  const gen = ++stillGen, fz = frozen, title = $('title').value.trim();
-  try {
-    const b = await composeBlob(fz, title);
-    if (gen !== stillGen) return b;
-    stillBlob = b; stillTitle = title;
-    if (stillURL) URL.revokeObjectURL(stillURL); stillURL = URL.createObjectURL(b);
-    const im = $('still'); im.src = stillURL; try { await im.decode(); } catch (e) {}
-    if (gen === stillGen && frozen === fz) { im.style.display = 'block'; $('capSvg').style.display = 'none'; }
-    return b;
-  } catch (e) { if (gen === stillGen) setNote('画像をつくれませんでした。もう一度お試しください', true); return null; }
+  g.drawImage(base, 0, 0); URL.revokeObjectURL(base.src);
+  if (title) g.drawImage(await svgToImage(captionSvg(rec.aspect, rec.ink, title, true).replace(`width="${A.w}" height="${A.h}"`, `width="${W}" height="${H}"`)), 0, 0, W, H);
+  return await toBlob(c, 'image/png');
 }
 async function ensureBlob() {
   const t = $('title').value.trim();
   if (stillBlob && stillTitle === t) return stillBlob;
   setNote('画像をつくっています…');
-  const b = await makeStill(); setNote(''); return b;
+  try { const b = await composeBlob(cur, t); stillBlob = b; stillTitle = t; if (stillURL) URL.revokeObjectURL(stillURL); stillURL = URL.createObjectURL(b); setNote(''); return b; }
+  catch (e) { setNote('画像をつくれませんでした。もう一度お試しください', true); return null; }
 }
+$('title').addEventListener('input', () => { stillBlob = null; posted = null; $('sPost').textContent = '投稿'; });
+$('title').addEventListener('keydown', e => { if (e.key === 'Enter') e.target.blur(); });
 function fileName() {
   const d = new Date(), p = v => String(v).padStart(2, '0');
-  const nm = ($('title').value.trim() || 'AudioSpectGraphic').replace(/[\\/:*?"<>|]+/g, '').trim().slice(0, 40) || 'AudioSpectGraphic';
+  const nm = ($('title').value.trim() || (cur && ZK_NAME[cur.id]) || 'AudioSpectGraphic').replace(/[\\/:*?"<>|]+/g, '').trim().slice(0, 40) || 'AudioSpectGraphic';
   return `${nm}_${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}.png`;
 }
 function setNote(t, err) { const n = $('sNote'); n.textContent = t; n.classList.toggle('err', !!err); }
 const touchy = matchMedia('(pointer: coarse)').matches;
 $('sSave').addEventListener('click', async () => {
+  if (!cur) return;
   const b = await ensureBlob(); if (!b) return;
   const name = fileName();
   if (touchy && navigator.canShare) {   // スマホ：共有メニューから「画像を保存」で写真に入れられる
@@ -2278,7 +2386,6 @@ const SB_URL = 'https://jbcjokohlqlcbhtyxlaq.supabase.co';
 const SB_KEY = 'sb_publishable_9L3GzA-k2jnncFgGC3Tplw_Tf_1xDVQ';   // 公開用のキー（読み取りだけ。書き込みは post 関数が確認してから行う）
 const POST_FN = SB_URL + '/functions/v1/post';
 const GAL = { openAt: null, closeAt: null, items: [], total: 0, loading: false, admin: '' };
-let posted = null;
 const md = d => `${d.getMonth() + 1}/${d.getDate()}`;
 function periodText() { return GAL.openAt ? `${md(new Date(GAL.openAt))}〜${md(new Date(GAL.closeAt - 1))}` : '展示の会期中'; }
 function postState() {
@@ -2324,6 +2431,7 @@ async function makePostImages(url) {   // 拡大用（長辺1200px）と一覧�
   return { full: await enc(cf, 600000), thumb: await enc(ct, 140000), w: cf.width, h: cf.height };
 }
 $('pYes').addEventListener('click', async () => {
+  if (!cur) return;
   $('pYes').disabled = $('pNo').disabled = true;
   try {
     const blob = await ensureBlob(); if (!blob) throw new Error('img');
@@ -2355,19 +2463,20 @@ for (const key of ['fuji', 'hoshi']) {   // 2曲とも読み込んでおく（�
     .catch(() => { if (key === 'fuji') { $('loadMsg').textContent = '曲を読み込めませんでした。電波のよいところでページを読み込みなおしてください'; $('loadMsg').classList.add('err'); } });
 }
 loadSettings();
+zkLoad();
 fit();
 requestAnimationFrame(frame);
 
 // テスト用
 window.__asg = {
   get SONG() { return SG; }, get PLAN() { return PLAN; }, MOODS, MOTIFS, CONS_SEQ, motifsOf, useSong, songBufs, wp, evalQ, FUJI, CFG, STYLES,
-  state: () => ({ playing, stopped, clock: clockNow(), tc, aspect: curAspect, capLevel, scaleLv, gapEma, jsEma, ctx: actx && actx.state, cw: cv.width, ch: cv.height }),
+  state: () => ({ playing, stopped, clock: clockNow(), zk: ZK.size, tc, aspect: curAspect, capLevel, scaleLv, gapEma, jsEma, ctx: actx && actx.state, cw: cv.width, ch: cv.height }),
   curves: () => ({ disp: Array.from(dispC), db: liveDb.slice() }),
-  frozen: () => frozen, still: () => stillBlob, compose: (t) => composeBlob(frozen, t || ''), lastQ: () => lastQ,
+  capture, subjectAt: () => subjectAt(clockNow(), lastQ), zk: () => [...ZK.keys()], openZukan, openShot, lastQ: () => lastQ,
   seekAbs(sec) { this.seek(sec - Math.floor(clockNow() / DUR) * DUR); },
   seek(sec) { const was = playing; if (was) stopAudio(); playing = false; clockBase = Math.floor(clockBase / DUR) * DUR + sec; resetDirector(); tc = 0; while (clockBase >= wp(tc + 1).s) tc++; if (was) { startAudio(); playing = true; } },
   jumpTo, featurePlan, FEATURE_SEQ,
-  stop, play, setCap: v => { capLevel = v; }, setScale: v => { scaleLv = v; }, lock: v => { window.__lockCap = v; },
+  play, setCap: v => { capLevel = v; }, setScale: v => { scaleLv = v; }, lock: v => { window.__lockCap = v; },
 };
 
 // ---------- ギャラリー ----------
