@@ -300,7 +300,8 @@ const HIST = 220;            // 過去の山並み（時間の奥行き・残響
 const ROWS = 4 + HIST;       // 0:いま 1:ゆっくり 2:ピーク 3:予備 4〜:過去
 const TMAX = 20;             // 時間の奥行きのコピー数（最大）
 const NSTAR = 4000;
-const HW = 0.504;            // 棒の高さの基準（地平線の長さ2に対して。ポスターと同じ比率）
+const HW = 0.504;
+const TAU_E = Math.PI * 2;            // 棒の高さの基準（地平線の長さ2に対して。ポスターと同じ比率）
 
 // ---------- 行列（列優先） ----------
 const M4 = {
@@ -343,11 +344,11 @@ layout(location=0) in vec3 aP;
 layout(location=1) in vec3 aN;
 layout(location=2) in vec2 aUS;
 uniform mat4 uVP, uM;
-uniform float uN, uH, uEnv, uPad, uDual, uDu;
+uniform float uN, uH, uEnv, uPad, uDual, uDu, uShift;
 uniform vec3 uOff;
 out float vU; out float vY; out vec3 vW;
 ${GLSL_CURVE}
-float bv(float u) { float bi = floor(clamp(u, 0., .99999) * uN); return cv((bi + .5) / uN); }
+float bv(float u) { float bi = floor(clamp(u * uN + uShift, 0., uN - 1e-4)); return cv((bi + .5 - uShift) / uN); }
 void main() {
   float u = aUS.x, s = aUS.y, h = uDu * .5;
   float e = max(max(cv(u), max(cv(u - h), cv(u + h))), max(cv(u - uDu), cv(u + uDu)));
@@ -362,15 +363,15 @@ void main() {
 precision highp float;
 precision highp int;
 in float vU; in float vY; in vec3 vW;
-uniform float uN, uSm, uH, uDual, uW, uSegA, uSegP, uSegF, uRound, uCap, uPeak, uTip, uFill, uLen, uPx, uSpine;
+uniform float uN, uSm, uH, uDual, uW, uSegA, uSegP, uSegF, uRound, uCap, uPeak, uTip, uFill, uLen, uPx, uSpine, uShift, uBeam, uShade;
 uniform vec3 uC0, uC1, uCapC, uPeakC;
 uniform float uA, uFlat, uRefl, uFloorY, uRLen, uRipK;
 out vec4 o;
 ${GLSL_CURVE}
 float hsh(float k) { return fract(sin(k * 127.1 + 311.7) * 43758.5453); }
 void main() {
-  float x = vU * uN, bi = floor(x);
-  float v = uSm <= 0. ? cv((bi + .5) / uN) : uSm >= 1. ? cv(vU) : mix(cv((bi + .5) / uN), cv(vU), uSm);
+  float x = vU * uN + uShift, bi = floor(x), uc = (bi + .5 - uShift) / uN;
+  float v = uSm <= 0. ? cv(uc) : uSm >= 1. ? cv(vU) : mix(cv(uc), cv(vU), uSm);
   float top = v * uH * (vY < 0. ? uDual : 1.);
   float ay = abs(vY);
   float fy = max(fwidth(vY), 1e-6);
@@ -397,6 +398,8 @@ void main() {
   float g0 = top + 4. * uPx * fy, g1 = g0 + 2.4 * uPx * fy;
   float pk = uPeak * ax * step(.02, v) * clamp((ay - g0) / fy + .5, 0., 1.) * clamp((g1 - ay) / fy + .5, 0., 1.);
   float ab = body * uFill;
+  if (uBeam > 0.) { float tt = clamp(ay / max(top, 1e-4), 0., 1.); ab *= mix(1., (1. - pow(tt, .75)) * .92 + .08, uBeam); col = mix(col, mix(uC1, vec3(1.), .35), uBeam * (1. - tt) * .35); }
+  col *= uShade;
   vec4 res = vec4(col * ab, ab);
   float spn = uSpine * clamp((2.6 * uPx * fy - ay) / fy + .5, 0., 1.);
   res = vec4(uC0 * spn, spn) + res * (1. - spn);
@@ -685,11 +688,13 @@ function shapeOf(Q, j, out) {
   const cs = Math.cos(Q.spin), sn = Math.sin(Q.spin);
   const ph = j * Q.strand, coil = Q.coilR, tw = Q.twist * 2 * Math.PI, rad = Q.radial, rs = Q.radSign;
   const lz = -j * Q.layerDepth, LL = Q.L[j] || {}, lsc = LL.sc ?? 1, lox = LL.ox || 0, loy = LL.oy || 0;
+  const lr = LL.rot || 0, lc = Math.cos(lr), ls = Math.sin(lr);
+  const sph = Q.sph || 0, sForm = Q.sphF || 0, sT = Q.sphTurns || 10, SR = 0.55;
   for (let i = 0; i < SAMP; i++) {
     const u = i / (SAMP - 1);
     // 回転（平面の中で）
-    const x = px[i] * cs - py[i] * sn, y = px[i] * sn + py[i] * cs;
-    const ax = nx[i] * cs - ny[i] * sn, ay = nx[i] * sn + ny[i] * cs;   // 面の中の法線（棒の向き）。奥行き方向は (0,0,1)
+    const x0 = px[i] * cs - py[i] * sn, y0 = px[i] * sn + py[i] * cs, ax0 = nx[i] * cs - ny[i] * sn, ay0 = nx[i] * sn + ny[i] * cs;
+    const x = x0 * lc - y0 * ls, y = x0 * ls + y0 * lc, ax = ax0 * lc - ay0 * ls, ay = ax0 * ls + ay0 * lc;   // 面の中の法線（棒の向き）。奥行き方向は (0,0,1)
     const psi = 2 * Math.PI * Q.coilTurns * u + Q.coilPh + ph;
     const cp = Math.cos(psi), sp = Math.sin(psi);
     const rX = ax * cp, rY = ay * cp, rZ = sp;                        // 螺旋の外向き
@@ -698,9 +703,24 @@ function shapeOf(Q, j, out) {
     let bx = ax * cf, by = ay * cf, bz = sf;                          // ねじれた棒の向き
     bx += (rX * rs - bx) * rad; by += (rY * rs - by) * rad; bz += (rZ * rs - bz) * rad;
     const bl = Math.hypot(bx, by, bz) || 1;
-    const o = i * 6, X = (x + coil * rX) * lsc + lox, Y = (y + coil * rY) * lsc + loy, Z = (coil * rZ + lz) * lsc;
+    let X = x + coil * rX, Y = y + coil * rY, Z = coil * rZ + lz, NX = bx / bl, NY = by / bl, NZ = bz / bl;
+    if (sph > 0) {   // 球（うに）→ 円柱のらせん → 竜巻
+      const ph2 = TAU_E * sT * u + Q.spin + j * (Q.strand || 0);
+      const th = Math.PI * (0.06 + 0.88 * u), cp2 = Math.cos(ph2), sp2 = Math.sin(ph2);
+      const shp = [[SR * Math.sin(th), -SR * Math.cos(th)], [SR * 0.75, -SR * 1.25 + 2.5 * SR * u], [SR * (0.12 + u), -SR * 1.3 + 2.6 * SR * u]];
+      const nrm = [[Math.sin(th), -Math.cos(th)], [1, 0], [0.93, -0.36]];
+      const fa = Math.min(1, sForm), fb = Math.max(0, sForm - 1);
+      const rr = sForm <= 1 ? shp[0][0] + (shp[1][0] - shp[0][0]) * fa : shp[1][0] + (shp[2][0] - shp[1][0]) * fb;
+      const yy = sForm <= 1 ? shp[0][1] + (shp[1][1] - shp[0][1]) * fa : shp[1][1] + (shp[2][1] - shp[1][1]) * fb;
+      const nr = sForm <= 1 ? nrm[0][0] + (nrm[1][0] - nrm[0][0]) * fa : nrm[1][0] + (nrm[2][0] - nrm[1][0]) * fb;
+      const ny2 = sForm <= 1 ? nrm[0][1] + (nrm[1][1] - nrm[0][1]) * fa : nrm[1][1] + (nrm[2][1] - nrm[1][1]) * fb;
+      X += (rr * cp2 - X) * sph; Y += (yy - Y) * sph; Z += (rr * sp2 - Z) * sph;
+      NX += (nr * cp2 - NX) * sph; NY += (ny2 - NY) * sph; NZ += (nr * sp2 - NZ) * sph;
+      const nl = Math.hypot(NX, NY, NZ) || 1; NX /= nl; NY /= nl; NZ /= nl;
+    }
+    const o = i * 6; X = X * lsc + lox; Y = Y * lsc + loy; Z *= lsc;
     P[o] = P[o + 3] = X; P[o + 1] = P[o + 4] = Y; P[o + 2] = P[o + 5] = Z;
-    N[o] = N[o + 3] = bx / bl; N[o + 1] = N[o + 4] = by / bl; N[o + 2] = N[o + 5] = bz / bl;
+    N[o] = N[o + 3] = NX; N[o + 1] = N[o + 4] = NY; N[o + 2] = N[o + 5] = NZ;
   }
   // 線の長さ（棒の幅の基準）
   let len = 0; for (let i = 1; i < SAMP; i++) { const o = i * 6, p = o - 6; len += Math.hypot(P[o] - P[p], P[o + 1] - P[p + 1], P[o + 2] - P[p + 2]); }
@@ -730,12 +750,14 @@ function camOf(Q, shapes, asp) {
   });
   const hz = Q.hz, fov = Q.fov * Math.PI / 180, tf = Math.tan(fov / 2);
   const cx = (x0 + x1) / 2, cyy = (y0 + y1) / 2, cz = (z0 + z1) / 2;
-  const halfW = Math.max((rx1 - rx0) / 2, 0.05), halfH = Math.max((ry1 - ry0) / 2, 0.05);
+  let halfW = Math.max((rx1 - rx0) / 2, 0.05), halfH = Math.max((ry1 - ry0) / 2, 0.05);
+  const fk = Q.fitK || 0;
+  if (fk > 0) { halfW += ((asp > 1 ? Q.fitW : Q.fitH * 0.62) - halfW) * fk; halfH += ((asp > 1 ? Q.fitH : Q.fitW * 1.1) - halfH) * fk; }
   // 地平線のときはポスターと同じ：横幅いっぱい・地平線を画面の決まった高さに
   const dW = 1 / (0.967 * asp * tf);
   const dS = Math.max(halfW / (asp * tf), halfH / tf) / 0.86;
   let d = (dW + (dS - dW) * (1 - hz)) / Q.zoom / (asp < 1 ? 1 + 0.22 * hz : 1);   // 縦長の地平線はポスターと同じく少し大きく
-  const tgt = [cx * (1 - hz) + Q.tx, cyy * (1 - hz) + Q.ty, cz * (1 - hz) + Q.tz];
+  const tgt = [(cx * (1 - fk) + 0 * fk) * (1 - hz) + Q.tx, (cyy * (1 - fk) + (Q.fitCy || 0) * fk) * (1 - hz) + Q.ty, (cz * (1 - fk)) * (1 - hz) + Q.tz];
   if (Q.fly > 0) d += (Q.flyD - d) * Q.fly;
   const yaw = Q.yaw, pit = clamp(Q.pitch, -1.45, 1.45);
   const eye = [tgt[0] + d * Math.sin(yaw) * Math.cos(pit), tgt[1] + d * Math.sin(pit), tgt[2] + d * Math.cos(yaw) * Math.cos(pit)];
@@ -751,7 +773,7 @@ function camOf(Q, shapes, asp) {
 function engDerive(Q, asp) {   // 形から自動で決まるもの（床・地平線らしさ・暗さ）
   const lum = lum3(Q.bgc.sky[1]);
   Q.dark = smooth01(0.72, 0.5, lum);
-  Q.hz = (1 - smooth01(0, 0.55 * Math.PI, Math.abs(Q.kap))) * (1 - smooth01(0.02, 0.12, Q.coilR)) * (1 - Q.fly) * (1 - smooth01(0.04, 0.35, Math.abs(Math.sin(Q.spin)))) * smooth01(0.5, 0.95, Math.cos(Q.roll));   // 傾いた・逆さの地平線には床を出さない
+  Q.hz = (1 - (Q.hzOff || 0)) * (1 - (Q.sph || 0)) * (1 - smooth01(0, 0.55 * Math.PI, Math.abs(Q.kap))) * (1 - smooth01(0.02, 0.12, Q.coilR)) * (1 - Q.fly) * (1 - smooth01(0.04, 0.35, Math.abs(Math.sin(Q.spin)))) * smooth01(0.5, 0.95, Math.cos(Q.roll));   // 傾いた・逆さの地平線には床を出さない
   Q.floorA = Q.floor * Q.hz;
   Q.floorY = 0; Q.floorZ0 = 0;
   Q.gridX = 0.0248; Q.gridZ = (asp > 1 ? 2.8 : 5.2) / 26;
@@ -805,12 +827,12 @@ function engRender(E, Q, W, H, target) {
   gl.uniform1f(U.uDu, 1 / (SAMP - 1)); gl.uniform1f(U.uPx, px);
   gl.uniform1f(U.uN, Q.count); gl.uniform1f(U.uSm, Q.smooth); gl.uniform1f(U.uMir, Q.mirror); gl.uniform1f(U.uDual, Q.dual);
   gl.uniform1f(U.uW, Q.width); gl.uniform1f(U.uSegA, Q.segA); gl.uniform1f(U.uSegP, Q.segP); gl.uniform1f(U.uSegF, Q.segF); gl.uniform1f(U.uRound, Q.round);
-  gl.uniform1f(U.uTip, Q.tip); gl.uniform1f(U.uFill, Q.fill); gl.uniform1f(U.uSpine, Q.spine || 0);
+  gl.uniform1f(U.uTip, Q.tip); gl.uniform1f(U.uFill, Q.fill); gl.uniform1f(U.uSpine, Q.spine || 0); gl.uniform1f(U.uBeam, Q.beam || 0);
   const capC = BG.cap, ripK = 1000 / (2 * cam.d * cam.tf);
   const I = M4.id(), MIR = M4.mirrorY(floorY);
   const draw = (j, o) => {
     const L = Q.L[j], sh = shapes[j];
-    gl.uniform1i(U.uRA, o.ra ?? L.ra); gl.uniform1i(U.uRB, o.rb ?? L.rb); gl.uniform1f(U.uRM, o.rm ?? L.rm);
+    gl.uniform1i(U.uRA, o.ra ?? L.ra); gl.uniform1i(U.uRB, o.rb ?? L.rb); gl.uniform1f(U.uRM, o.rm ?? L.rm); gl.uniform1f(U.uShift, L.us || 0); gl.uniform1f(U.uShade, o.shade ?? 1);
     gl.uniform1f(U.uH, HW * Q.bar * L.h * (L.sc ?? 1) * (o.hm || 1)); gl.uniform1f(U.uEnv, o.env || 1); gl.uniform1f(U.uPad, HW * 0.06);
     gl.uniform1f(U.uLen, sh.len); gl.uniform3fv(U.uOff, o.off || [0, 0, 0]);
     gl.uniform3fv(U.uC0, L.c0); gl.uniform3fv(U.uC1, L.c1); gl.uniform3fv(U.uCapC, capC);
@@ -840,8 +862,30 @@ function engRender(E, Q, W, H, target) {
     }
     if (reflA > 0.003) draw(j, { a: L.a, refl: reflA });
     if (Q.echo > 0.003) { draw(j, { a: L.a * 0.12 * Q.echo, hm: 1.24, flat: 1 }); draw(j, { a: L.a * 0.25 * Q.echo, hm: 1.12, flat: 1 }); }
+    const th = Q.thick || 0;
+    if (th > 0.003) { const S = 9, zs = cam.eye[2] >= cam.tgt[2] ? -1 : 1; for (let k = S - 1; k >= 1; k--) draw(j, { a: L.a, off: [0, 0, zs * th * 0.1 * k / (S - 1)], shade: 0.34 + 0.5 * (1 - k / (S - 1)) }); }   // 厚み（カメラから見て奥へ重ねて立体に）
     draw(j, { a: L.a });
   }
+  // 花火：咲いた瞬間の音の形が、広がって、落ちながら消えていく
+  if (Q.bursts && Q.bursts.length) {
+    gl.uniform1f(U.uMir, 1); gl.uniform1f(U.uSm, 0); gl.uniform1f(U.uTip, 0); gl.uniform1f(U.uFill, 1); gl.uniform1f(U.uSpine, 0); gl.uniform1f(U.uBeam, 0); gl.uniform1f(U.uDual, 0);
+    gl.uniform1f(U.uSegP, 2.4); gl.uniform1f(U.uSegF, 0.45);
+    const sh = shapes[0];
+    for (const b of Q.bursts) {
+      gl.uniform1f(U.uN, b.n); gl.uniform1f(U.uW, b.w); gl.uniform1f(U.uSegA, b.seg); gl.uniform1f(U.uRound, b.seg);
+      for (const [k, f, af] of [[2, 0.72, 0.16], [1, 0.86, 0.32], [0, 1, 1]]) {
+        if (b.a * af < 0.01) continue;
+        const m = M4.id(), s2 = b.s * f; m[0] = m[5] = m[10] = s2; m[12] = b.x; m[13] = b.y;
+        gl.uniform1i(U.uRA, b.row); gl.uniform1i(U.uRB, b.row); gl.uniform1f(U.uRM, 0); gl.uniform1f(U.uShift, 0); gl.uniform1f(U.uShade, 1);
+        gl.uniform1f(U.uH, HW * b.len); gl.uniform1f(U.uEnv, 1); gl.uniform1f(U.uPad, HW * 0.06); gl.uniform1f(U.uLen, sh.len); gl.uniform3fv(U.uOff, [0, 0, 0]);
+        gl.uniform3fv(U.uC0, b.c0); gl.uniform3fv(U.uC1, b.c1); gl.uniform3fv(U.uCapC, capC); gl.uniform3fv(U.uPeakC, mixC3(b.c1, [1, 1, 1], 0.6));
+        gl.uniform1f(U.uCap, 0); gl.uniform1f(U.uPeak, k ? 0 : 1); gl.uniform1f(U.uFlat, k ? 1 : 0); gl.uniform1f(U.uA, b.a * af);
+        gl.uniform1f(U.uRefl, 0); gl.uniformMatrix4fv(U.uM, false, m);
+        gl.bindVertexArray(sh.vao); gl.drawArrays(gl.TRIANGLE_STRIP, 0, SAMP * 2);
+      }
+    }
+  }
+  if (Q.streaks && Q.streaks.length) for (const st of Q.streaks) drawSegs(E, VP, W, H, [[st.p0, st.p1]], st.c, st.a, px * 2.2);
   // 目盛り（地平線のときの数字・線）
   const axA = Q.axis * hz;
   if (axA > 0.01) drawAxis(E, Q, VP, shapes[0], px, W, H, axA, dark);
@@ -871,6 +915,20 @@ function engRender(E, Q, W, H, target) {
 }
 const mixC3 = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
 
+function drawSegs(E, VP, W, H, list, col, alpha, wpx) {
+  const gl = E.gl, v = [];
+  for (const [p0, p1] of list) {
+    const a0 = M4.xf(VP, p0), a1 = M4.xf(VP, p1); if (a0[2] <= 0 || a1[2] <= 0) continue;
+    let dx = (a1[0] - a0[0]) * W, dy = (a1[1] - a0[1]) * H; const l = Math.hypot(dx, dy) || 1; dx /= l; dy /= l;
+    const ox = -dy * wpx / W, oy = dx * wpx / H;
+    v.push(a0[0] + ox, a0[1] + oy, 0, a0[0] - ox, a0[1] - oy, 0, a1[0] + ox, a1[1] + oy, 0, a0[0] - ox, a0[1] - oy, 0, a1[0] - ox, a1[1] - oy, 0, a1[0] + ox, a1[1] + oy, 0);
+  }
+  if (!v.length) return;
+  const U = E.P.line.U; gl.useProgram(E.P.line.p); gl.uniformMatrix4fv(U.uVP, false, M4.id());
+  gl.bindVertexArray(E.lines); gl.bindBuffer(gl.ARRAY_BUFFER, E.lineBuf); gl.bufferSubData(gl.ARRAY_BUFFER, 0, new Float32Array(v));
+  gl.uniform4f(U.uC, col[0], col[1], col[2], alpha); gl.drawArrays(gl.TRIANGLES, 0, v.length / 3);
+  gl.useProgram(E.P.bar.p);
+}
 // 目盛り：形の線にそって、周波数の位置に短い線と数字（形といっしょに変形する）
 function drawAxis(E, Q, VP, sh, px, W, H, a, dark) {
   const gl = E.gl, P = sh.P, N = sh.N, glowLine = Q.glow * dark > 0.5;
@@ -1093,33 +1151,34 @@ const TRAIL_DT = 0.085;
 // =====================================================
 // どの数値も途中の値をとれる。変化は「グループ」ごとに少しずつずらして進む（曲がる → 裏返る → 角ができる …）
 const GROUPS = {
-  shape: ['kap', 'poly', 'sides', 'polyRot'],
+  shape: ['kap', 'poly', 'sides', 'polyRot', 'sph', 'sphF', 'sphTurns', 'hzOff'],
   coil: ['coilR', 'coilTurns', 'strand', 'radial', 'radSign', 'coilSpd'],
   twist: ['twist', 'twSpd'],
   trail: ['trail', 'trailDz', 'trailDir', 'layerDepth', 'trailMode', 'trailExp'],
-  style: ['count', 'width', 'smooth', 'segA', 'segP', 'segF', 'round', 'tip', 'fill', 'spine', 'bar', 'mirror', 'dual'],
+  style: ['count', 'width', 'smooth', 'segA', 'segP', 'segF', 'round', 'tip', 'fill', 'spine', 'bar', 'mirror', 'dual', 'thick', 'beam'],
   fx: ['cap', 'peak', 'echo', 'glow', 'refl', 'floor', 'grid', 'stars', 'grain', 'scan', 'ink', 'axis'],
-  cam: ['zoom', 'pitch', 'fov', 'yawK', 'yawAmp', 'rollK', 'yawSpd', 'rollSpd', 'tx', 'ty', 'tz'],
+  cam: ['zoom', 'pitch', 'fov', 'yawK', 'yawAmp', 'rollK', 'yawSpd', 'rollSpd', 'tx', 'ty', 'tz', 'camLive', 'fitK', 'fitW', 'fitH', 'fitCy'],
   fly: ['fly', 'flyD'],
   spin: ['spinK', 'spinSpd'],
 };
 const GROUP_OF = {}; for (const g in GROUPS) for (const p of GROUPS[g]) GROUP_OF[p] = g;
 const ANG = { yaw: ['yawK', 'yawSpd'], roll: ['rollK', 'rollSpd'], spin: ['spinK', 'spinSpd'], coilPh: [null, 'coilSpd'], twPh: [null, 'twSpd'] };
-const STYLES = {
+const STYLES = Object.fromEntries(Object.entries({
   bar:     { width: 0.6, smooth: 0, segA: 0, round: 0, tip: 0, fill: 1 },
   thin:    { width: 0.26, smooth: 0, segA: 0, round: 0, tip: 0, fill: 1 },
   wide:    { width: 0.92, smooth: 0, segA: 0, round: 0, tip: 0, fill: 1 },
   block:   { width: 0.78, smooth: 0, segA: 1, segP: 0.72, segF: 0.69, round: 0, tip: 0, fill: 1 },
   dot:     { width: 0.7, smooth: 0, segA: 1, segP: 1.0, segF: 0.8, round: 1, tip: 0, fill: 1 },
   round:   { width: 0.74, smooth: 0, segA: 1, segP: 1.6, segF: 0.78, round: 0.55, tip: 0, fill: 1 },
-  area:    { width: 1, smooth: 1, segA: 0, round: 0, tip: 0, fill: 1 },
-  line:    { width: 1, smooth: 1, segA: 0, round: 0, tip: 1, fill: 0.12 },
-  stripe:  { width: 1, smooth: 0.7, segA: 1, segP: 0.55, segF: 0.5, round: 0, tip: 0, fill: 1 },
+  line:    { width: 1, smooth: 1, segA: 0, round: 0, tip: 1, fill: 0.07 },
   outline: { width: 0.62, smooth: 0, segA: 0, round: 0, tip: 1, fill: 0.16 },
-  ridge:   { width: 1, smooth: 1, segA: 0, round: 0, tip: 1, fill: 1 },
   spark:   { width: 0.3, smooth: 0, segA: 1, segP: 2.4, segF: 0.45, round: 1, tip: 0, fill: 1 },
-};
+  beam:    { width: 0.5, smooth: 0, segA: 0, round: 0, tip: 0, fill: 1, beam: 1 },              // 光の柱：根もとが明るく、先が透ける
+  pillar:  { width: 0.62, smooth: 0, segA: 0, round: 0, tip: 0, fill: 1, thick: 1 },            // 厚みのある柱（音の街）
+  voxel:   { width: 0.78, smooth: 0, segA: 1, segP: 0.72, segF: 0.69, round: 0, tip: 0, fill: 1, thick: 1 },   // ブロックの立体
+}).map(([k, v]) => [k, { beam: 0, thick: 0, ...v }]));
 const styleOf = v => { let best = 'bar', bd = 1e9; for (const k in STYLES) { const s = STYLES[k]; let d = 0; for (const p in s) d += Math.abs((v[p] ?? 0) - s[p]); if (d < bd) { bd = d; best = k; } } return best; };
+const NOSTYLE = ['spark'];
 // 背景（時間帯はなし）
 const BGK = {
   night: () => ({ sky: ['#03050c', '#060a18', '#0c1226'], gnd: ['#05070f', '#000000'], ink: '#cfe3ff', cap: '#ffffff' }),
@@ -1143,19 +1202,19 @@ const ALLP = PALS.map((_, k) => k);
 
 const MOODS = {
   intro: { energy: 0.5, n: [2], moves: { bend: 2, zoom: 1.6, orbit: 1, tilt: 0.8, style: 1.4, count: 0.6, color: 0.8, layers: 1, fx: 1, twist: 0.6, poly: 0.8, roll: 0.5, flip: 0.6, mirror: 0.3 },
-           bgs: { night: 4, black: 1.5, navy: 2, deep: 1.5 }, pals: [0, 1, 3, 4], styles: ['line', 'area', 'dot', 'bar', 'thin', 'outline', 'round'],
+           bgs: { night: 4, black: 1.5, navy: 2, deep: 1.5 }, pals: [0, 1, 3, 4], styles: ['line', 'dot', 'bar', 'thin', 'outline', 'round', 'beam'], camLive: 0.5,
            fxPool: ['glow', 'stars', 'echo', 'peak', 'refl', 'grid', 'axis', 'grain', 'cap'] },
-  verse: { energy: 0.8, n: [2, 2, 3], moves: { bend: 2, poly: 1.5, flip: 1.2, roll: 1, zoom: 1.4, orbit: 1, tilt: 1, twist: 1.2, coil: 0.9, trail: 0.9, spin: 0.8, style: 1.6, count: 1, color: 1.2, bg: 0.8, layers: 1, fx: 1.2, mirror: 0.5, dual: 0.5 },
-           bgs: { night: 2, black: 1.5, navy: 1.5, deep: 2, vivid: 1.5, paper: 0.8, white: 0.5, light: 0.8 }, pals: ALLP, styles: Object.keys(STYLES),
+  verse: { energy: 0.8, n: [2, 2, 3], moves: { bend: 2, poly: 1.5, flip: 1.2, roll: 1, zoom: 1.4, orbit: 1.2, tilt: 1, twist: 1.2, coil: 0.9, globe: 1, trail: 0.9, spin: 0.8, style: 1.6, count: 1, color: 1.2, bg: 0.8, layers: 1, fx: 1.2, mirror: 0.5, dual: 0.5 },
+           bgs: { night: 2, black: 1.5, navy: 1.5, deep: 2, vivid: 1.5, paper: 0.8, white: 0.5, light: 0.8 }, pals: ALLP, styles: Object.keys(STYLES).filter(k => !NOSTYLE.includes(k)), camLive: 0.8,
            fxPool: ['glow', 'stars', 'echo', 'peak', 'refl', 'grid', 'axis', 'grain', 'cap', 'scan', 'ink'] },
   break: { energy: 0.35, n: [2], force: ['bg', 'calm'], moves: { bend: 1, poly: 1, zoom: 1, color: 1, fx: 1, layers: 0.8, mirror: 0.4, style: 1 },
-           bgs: { paper: 4, white: 2, light: 2 }, pals: [11, 5, 8, 6, 7, 9], styles: ['area', 'line', 'bar', 'thin', 'stripe', 'outline', 'dot'],
+           bgs: { paper: 4, white: 2, light: 2 }, pals: [11, 5, 8, 6, 7, 9], styles: ['line', 'bar', 'thin', 'outline', 'dot', 'beam'], camLive: 0.3,
            fxPool: ['ink', 'grain', 'axis', 'peak', 'echo', 'refl', 'cap'] },
-  drop:  { energy: 1.2, n: [2, 3], moves: { coil: 2.4, trail: 2, fly: 2, twist: 1.8, flip: 1.5, roll: 1.5, zoom: 1.5, bend: 1.5, poly: 1.2, orbit: 1.2, spin: 1, style: 1, count: 0.8, color: 1, bg: 0.6, layers: 1, fx: 1, dual: 0.6, mirror: 0.6 },
-           bgs: { night: 2, black: 3, vivid: 2, deep: 1.5 }, pals: [0, 1, 2, 3, 7, 6], styles: ['bar', 'block', 'dot', 'thin', 'wide', 'round', 'line', 'area'],
+  drop:  { energy: 1.5, n: [2, 3], moves: { coil: 2, globe: 2, trail: 1.8, fly: 1.8, twist: 1.5, flip: 1.8, roll: 1.8, zoom: 1.8, bend: 1.5, poly: 1.2, orbit: 1.5, spin: 1, style: 1.2, count: 0.8, color: 1, bg: 0.6, layers: 0.8, fx: 1, dual: 0.5, mirror: 0.5 },
+           bgs: { night: 2, black: 3, vivid: 2, deep: 1.5 }, pals: [0, 1, 2, 3, 7, 6], styles: ['bar', 'block', 'dot', 'thin', 'wide', 'round', 'line', 'pillar', 'voxel', 'beam'], camLive: 1.5,
            fxPool: ['glow', 'echo', 'peak', 'cap', 'stars', 'scan', 'grid', 'refl', 'axis'] },
-  outro: { energy: 0.6, n: [2, 3], moves: { zoom: 2, bend: 1.5, orbit: 1.2, trail: 1.2, roll: 1, tilt: 1, color: 1.2, style: 1, layers: 1, fx: 1, poly: 0.8, twist: 0.6, bg: 0.6 },
-           bgs: { warm: 3, night: 1.5, deep: 1.5, black: 1 }, pals: [2, 6, 7, 0, 3], styles: ['bar', 'area', 'line', 'dot', 'thin', 'round', 'outline'],
+  outro: { energy: 0.7, n: [2, 3], moves: { zoom: 2, bend: 1.5, orbit: 1.4, trail: 1.2, globe: 0.8, roll: 1, tilt: 1, color: 1.2, style: 1, layers: 1, fx: 1, poly: 0.8, twist: 0.6, bg: 0.6 },
+           bgs: { warm: 3, night: 1.5, deep: 1.5, black: 1 }, pals: [2, 6, 7, 0, 3], styles: ['bar', 'line', 'dot', 'thin', 'round', 'outline', 'beam', 'pillar'], camLive: 0.7,
            fxPool: ['glow', 'stars', 'echo', 'peak', 'refl', 'grid', 'grain', 'cap'] },
 };
 // ポスターと同じ状態（ブレイクの後半）
@@ -1163,12 +1222,14 @@ function posterV() {
   return {
     kap: 0, poly: 0, sides: 6, polyRot: 0, coilR: 0, coilTurns: 2, strand: 0, radial: 0, radSign: 1, coilSpd: 0, twist: 0, twSpd: 0,
     trail: 0, trailDz: 0.1, trailDir: 1, layerDepth: 0, trailMode: 0, trailExp: 0.05,
-    count: 100, width: 0.6, smooth: 0, segA: 0, segP: 0.72, segF: 0.7, round: 0, tip: 0, fill: 1, spine: 0, bar: 1, mirror: 0, dual: 0,
+    count: 100, width: 0.6, smooth: 0, segA: 0, segP: 0.72, segF: 0.7, round: 0, tip: 0, fill: 1, spine: 0, bar: 1, mirror: 0, dual: 0, thick: 0, beam: 0,
+    sph: 0, sphF: 0, sphTurns: 10, hzOff: 0, camLive: 0, fitK: 0, fitW: 1.3, fitH: 0.8, fitCy: 0.25,
     cap: 1, peak: 0, echo: 0, glow: 1, refl: 1, floor: 1, grid: 1, stars: 1, grain: 0, scan: 0, ink: 0, axis: 0,
     zoom: 1, pitch: 0.017, fov: 26, yawK: 0, yawAmp: 0, rollK: 0, yawSpd: 0, rollSpd: 0, tx: 0, ty: 0, tz: 0, fly: 0, flyD: 1, spinK: 0, spinSpd: 0,
   };
 }
-const POSTER_L = () => [{ a: 1, p: 0, h: 1, m: 0, ox: 0, oy: 0, sc: 1 }, { a: 0, p: 1, h: 1, m: 2, ox: 0, oy: 0, sc: 1 }, { a: 0, p: 3, h: 1, m: 1, ox: 0, oy: 0, sc: 1 }];
+const L0 = { ox: 0, oy: 0, sc: 1, rot: 0, us: 0 };
+const POSTER_L = () => [{ a: 1, p: 0, h: 1, m: 0, ...L0 }, { a: 0, p: 1, h: 1, m: 2, ...L0 }, { a: 0, p: 3, h: 1, m: 1, ...L0 }];
 const nLayers = W => W.L.filter(L => L.a > 0.5).length;
 function fixPals(W, M) {   // 明るい背景に白・アイス、暗い背景に墨は使わない
   const dark = bgDark(W.bg), ok = p => dark ? p !== 11 : p !== 10 && p !== 4;
@@ -1192,7 +1253,7 @@ const MOVES = {
   trail(W, r) { const v = W.v;
     if (v.trail > 0.1) { v.trail = 0; v.fly = 0; v.trailDir = 1; v.bar = Math.max(v.bar, 0.85 + r() * 0.25); if (Math.abs(v.pitch) > 0.3) v.pitch = 0.05 + r() * 0.15; }
     else { v.trail = 0.55 + r() * 0.45; v.trailDz = 0.06 + r() * 0.06; v.trailDir = 1; v.layerDepth = 0;
-      if (Math.abs(v.kap) < 0.5) { v.pitch = 0.5 + r() * 0.4; v.zoom = 0.85 + r() * 0.3; v.bar = 0.4 + r() * 0.25; v.fov = 34 + r() * 12; v.trailDz = 0.1 + r() * 0.06; if (r() < 0.75) Object.assign(v, STYLES.ridge); }   // 時間が奥へ流れる山脈（稜線）
+      if (Math.abs(v.kap) < 0.5) { v.pitch = 0.5 + r() * 0.4; v.zoom = 0.85 + r() * 0.3; v.bar = 0.4 + r() * 0.25; v.fov = 34 + r() * 12; v.trailDz = 0.1 + r() * 0.06; if (r() < 0.6) Object.assign(v, STYLES.line); }   // 時間が奥へ流れる山脈（稜線）
       else { v.pitch = (r() - 0.5) * 0.8; v.bar = Math.min(v.bar, 0.8); } }
   },
   fly(W, r) { const v = W.v;
@@ -1204,6 +1265,11 @@ const MOVES = {
       v.rollSpd = sgn(r) * (0.1 + r() * 0.3);
     }
   },
+  globe(W, r, M) { const v = W.v;   // 立体：球（うに）／円柱のらせん／竜巻
+    if (v.sph > 0.5) { v.sph = 0; v.spinSpd = 0; W.lock.spin = 0; v.bar = 0.85 + r() * 0.25; return; }
+    v.sph = 1; v.sphF = pick(r, [0, 0, 0, 1, 2]); v.sphTurns = v.sphF > 1.5 ? 4 + r() * 4 : 7 + r() * 8; v.bar = 0.5 + r() * 0.25;
+    v.spinSpd = sgn(r) * (0.25 + r() * 0.4) * M.energy; v.count = 90 + Math.floor(r() * 60); v.pitch = (r() - 0.4) * 0.7; v.zoom = 1 + r() * 0.2; v.spine = 1;
+    Object.assign(v, STYLES[pick(r, ['thin', 'dot', 'beam', 'bar', 'thin'])]); v.width = Math.min(v.width, 0.5); },
   flip(W, r) { W.v.yawK += sgn(r) * PI; },
   roll(W, r, M) { const v = W.v; v.rollK += sgn(r) * pick(r, [PI / 4, PI / 2, PI]); v.rollSpd = r() < 0.4 ? sgn(r) * (0.08 + r() * 0.3) * M.energy : 0; },
   orbit(W, r, M) { const v = W.v, is3D = v.coilR > 0.05 || v.trail > 0.1 || Math.abs(v.twist) > 0.1 || v.layerDepth > 0.05;
@@ -1234,32 +1300,46 @@ const darkBg = r => { const k = pick(r, ['night', 'black', 'deep', 'navy']); ret
 const MOTIFS = {
   dna(W, r) {   // スペクトラムでできた二重螺旋：2本の鎖から棒がのびて、まん中で出会う（はしご）
     Object.assign(W.v, { kap: 0, poly: 0, coilR: 0.2, coilTurns: 2.3 + r() * 0.9, strand: PI, radial: 1, radSign: -1, coilSpd: sgn(r) * (0.5 + r() * 0.4), twist: 0, twSpd: 0,
-      trail: 0, trailMode: 0, fly: 0, flyD: 1, layerDepth: 0, mirror: 0, dual: 0, bar: 0.4, count: 40 + Math.floor(r() * 20), ...STYLES.thin, width: 0.34, spine: 1,
+      trail: 0, trailMode: 0, fly: 0, flyD: 1, layerDepth: 0, mirror: 0, dual: 0, sph: 0, hzOff: 0, fitK: 0, camLive: 0.6, bar: 0.4, count: 40 + Math.floor(r() * 20), ...STYLES.thin, width: 0.34, spine: 1,
       peak: 1, echo: 0, cap: 0, glow: 1, stars: 1, floor: 0, refl: 0, grid: 0, scan: 0, ink: 0, grain: r() < 0.3 ? 1 : 0, axis: 0,
       zoom: 1.0, pitch: 0.1, fov: 30, yawAmp: 0.3, yawSpd: 0.35, rollSpd: 0, tx: 0, ty: 0, tz: 0, spinSpd: 0 });
     const tilt = sgn(r); W.lock = { yaw: 0, roll: pick(r, [0.42, -0.42, 0]), spin: 0, twPh: 0 }; W.lockTall = { roll: tilt * (PI / 2 - 0.42) };   // 縦長では縦にのびる
     const pals = shuffle([0, 1, 2, 3, 7, 6], r);
-    W.L = [{ a: 1, p: pals[0], h: 1, m: 0, ox: 0, oy: 0, sc: 1 }, { a: 1, p: pals[1], h: 1, m: 0, ox: 0, oy: 0, sc: 1 }, { ...W.L[2], a: 0, ox: 0, oy: 0, sc: 1 }];
+    W.L = [{ a: 1, p: pals[0], h: 1, m: 0, ...L0 }, { a: 1, p: pals[1], h: 1, m: 0, ...L0 }, { ...W.L[2], a: 0, ...L0 }];
     [W.bgKind, W.bg] = darkBg(r);
   },
-  hanabi(W, r) {   // スペクトラムでできた花火：放射する光の筋と、外へ広がって消えていく残像。大小の玉がいくつか
-    Object.assign(W.v, { kap: PI, poly: 0, coilR: 0, radial: 0, coilSpd: 0, twist: 0, twSpd: 0, trail: 0.3 + r() * 0.15, trailMode: 1, trailExp: 0.035 + r() * 0.02, trailDir: 1,
-      fly: 0, flyD: 1, layerDepth: 0, mirror: 1, dual: 0, bar: 1.9 + r() * 0.4, count: 60 + Math.floor(r() * 50), ...(r() < 0.55 ? STYLES.spark : STYLES.thin), spine: 0,
-      peak: 1, echo: 0, cap: 0, glow: 1, stars: 1, floor: 0, refl: 0, grid: 0, scan: 0, ink: 0, grain: 0, axis: 0,
-      zoom: 0.92, pitch: 0.04, fov: 30, yawAmp: 0, rollSpd: 0, spinSpd: sgn(r) * 0.08, tx: 0, ty: 0, tz: 0 });
-    W.lock = { yaw: 0, roll: 0, twPh: 0, coilPh: 0 };
-    const pals = shuffle([2, 0, 1, 6, 7, 3], r), s = sgn(r);
-    W.L = [{ a: 1, p: pals[0], h: 1, m: 0, ox: (r() - 0.5) * 0.3, oy: 0.12 + r() * 0.2, sc: 1 },
-           { a: 1, p: pals[1], h: 1, m: 2, ox: s * (0.85 + r() * 0.2), oy: -0.3 + r() * 0.3, sc: 0.5 + r() * 0.15 },
-           { a: r() < 0.7 ? 1 : 0, p: pals[2], h: 1, m: 1, ox: -s * (0.8 + r() * 0.2), oy: -0.05 + r() * 0.4, sc: 0.38 + r() * 0.14 }];
-    [W.bgKind, W.bg] = [pick(r, ['night', 'black']), null]; W.bg = BGK[W.bgKind](r);
+  hanabi(W, r) {   // 花火：夜空だけ用意して、玉は拍ごとに次々と打ち上がる（evalQ の burstsAt）
+    Object.assign(W.v, { kap: PI, poly: 0, coilR: 0, radial: 0, coilSpd: 0, twist: 0, twSpd: 0, trail: 0, trailMode: 0, fly: 0, flyD: 1, layerDepth: 0, mirror: 1, dual: 0, sph: 0,
+      bar: 2, count: 72, ...STYLES.spark, spine: 0, peak: 1, echo: 0, cap: 0, glow: 1, stars: 1, floor: 0, refl: 0, grid: 0, scan: 0, ink: 0, grain: 0, axis: 0,
+      zoom: 1, pitch: 0.03, fov: 32, yawAmp: 0, rollSpd: 0, spinSpd: 0, tx: 0, ty: 0, tz: 0, hzOff: 1, camLive: 0.12, fitK: 1, fitW: 1.3, fitH: 0.82, fitCy: 0.25 });
+    W.lock = { yaw: 0, roll: 0, spin: 0, twPh: 0, coilPh: 0 };
+    W.L = W.L.map(L => ({ ...L, a: 0, ...L0 }));
+    W.bgKind = pick(r, ['night', 'black', 'night']); W.bg = BGK[W.bgKind](r);
   },
+};
+// 噛み合わせ：上下（縦長では左右）で向かい合い、近づいて、棒が交互に噛み合う
+MOTIFS.kamiA = (W, r) => {
+  Object.assign(W.v, { kap: 0, poly: 0, coilR: 0, radial: 0, coilSpd: 0, twist: 0, twSpd: 0, trail: 0, trailMode: 0, fly: 0, sph: 0, layerDepth: 0, mirror: 0, dual: 0,
+    bar: 1, count: 34 + Math.floor(r() * 22), ...STYLES[pick(r, ['bar', 'block', 'pillar', 'round'])], spine: 1, peak: 0, echo: 0, cap: r() < 0.4 ? 1 : 0,
+    glow: 1, stars: 1, floor: 0, refl: 0, grid: 0, scan: 0, ink: 0, axis: 0, hzOff: 1, fitK: 0,
+    zoom: 1, pitch: 0.05, fov: 30, yawAmp: 0.18, yawSpd: 0.3, rollSpd: 0, spinSpd: 0, tx: 0, ty: 0, tz: 0, camLive: 0.3 });
+  W.v.width = 0.42;
+  W.lock = { yaw: 0, roll: 0, spin: 0, twPh: 0, coilPh: 0 }; W.lockTall = { roll: PI / 2 };
+  const pals = shuffle([0, 1, 2, 3, 6, 7], r);
+  W.L = [{ a: 1, p: pals[0], h: 1, m: 0, ...L0, oy: -0.62 }, { a: 1, p: pals[1], h: 1, m: pick(r, [0, 2]), ...L0, oy: 0.62, rot: PI, us: 0.5 }, { ...W.L[2], a: 0, ...L0 }];
+  [W.bgKind, W.bg] = darkBg(r);
+};
+MOTIFS.kamiB = (W, r) => {
+  W.L[0].oy = -0.12; W.L[1].oy = 0.12; W.v.zoom = 1.1; W.v.yawAmp = 0.4; W.v.yawSpd = 0.45; W.v.pitch = 0.18; W.v.camLive = 0.5;
+  W.lock = { roll: 0 }; W.lockTall = { roll: PI / 2 };
 };
 // 重ね技が多すぎるとぐちゃぐちゃになるので、立体の技は1つずつ・レイヤーは少なめに
 function simplify(W) {
   const v = W.v, L = W.L, cap = n => L.forEach((l, j) => { if (j >= n) l.a = 0; }), vis = () => L.filter(l => l.a > 0.5).length;
   if (v.trailMode > 0.5) { v.trail = 0; v.mirror = 0; }   // 花火のあとは残像をしまう
-  v.trailMode = 0; L.forEach(l => { l.ox = 0; l.oy = 0; l.sc = 1; });
+  v.trailMode = 0; v.hzOff = 0; v.fitK = 0; L.forEach(l => Object.assign(l, L0));
+  if (v.sph > 0.5) { cap(2); v.coilR = 0; v.radial = 0; v.twist = 0; v.twSpd = 0; v.trail = 0; v.fly = 0; v.thick = 0; v.dual = 0; v.echo = 0; v.mirror = 0; v.layerDepth = 0; }
+  if (v.coilR > 0.05 || Math.abs(v.twist) > 0.1 || v.trail > 0.1 || v.fly > 0.5) v.thick = 0;
   v.bar = clamp(v.bar, 0.34, 1.3);
   if (v.fly > 0.5) { cap(1); v.echo = 0; v.dual = 0; v.mirror = 0; v.twist = 0; v.twSpd = 0; v.layerDepth = 0; v.coilR = 0; v.radial = 0; }
   if (v.trail > 0.1) { cap(1); v.echo = 0; v.dual = 0; v.twist = 0; v.twSpd = 0; v.layerDepth = 0; v.coilR = 0; v.radial = 0;
@@ -1276,22 +1356,23 @@ function simplify(W) {
 // 1周ごとに、どこにモチーフ（DNA・花火）が出るかを決める。出ない周もある
 function motifPlan(loop) {
   const r = mulberry(SEED * 31 + loop * 101 + 7), m = {}, force = new URLSearchParams(location.search).get('motif');
-  if (force) return { 8: 'dna', 20: 'hanabi' };
-  if (r() < 0.5) m[pick(r, [6, 8, 10, 18])] = 'dna';
-  if (r() < 0.5) m[pick(r, [20, 22, 24, 26].filter(b => !m[b]))] = 'hanabi';
+  if (force) return { 4: 'kamiA', 6: 'kamiB', 10: 'dna', 18: 'dna', 20: 'hanabi', 22: 'hanabi' };
+  if (r() < 0.45) { const b = pick(r, [4, 8, 24]); m[b] = 'kamiA'; m[b + 2] = 'kamiB'; }
+  if (r() < 0.45) { const c = [6, 8, 10, 18].filter(b => !m[b]); if (c.length) m[pick(r, c)] = 'dna'; }
+  if (r() < 0.55) { const c = [20, 24].filter(b => !m[b] && !m[b + 2]); if (c.length) { const b = pick(r, c); m[b] = m[b + 2] = 'hanabi'; } }
   return m;
 }
-const MOVE_GROUPS = { bend: ['shape'], poly: ['shape'], coil: ['coil', 'style', 'layers'], twist: ['twist'], trail: ['trail', 'cam'], fly: ['shape', 'trail', 'fly', 'cam'],
+const MOVE_GROUPS = { globe: ['shape', 'spin', 'style', 'cam'], bend: ['shape'], poly: ['shape'], coil: ['coil', 'style', 'layers'], twist: ['twist'], trail: ['trail', 'cam'], fly: ['shape', 'trail', 'fly', 'cam'],
   flip: ['cam'], roll: ['cam'], orbit: ['cam'], zoom: ['cam'], tilt: ['cam'], spin: ['spin'], style: ['style'], count: ['style'], color: ['color'], bg: ['color'],
   layers: ['layers', 'trail'], fx: ['fx'], mirror: ['style'], dual: ['style'], calm: ['coil', 'twist', 'trail', 'fly', 'cam', 'spin'] };
 
 // 1周（28小節）の目標点の並び。[小節, 雰囲気]
 const PLAN = [[0, 'intro'], [2, 'intro'], [4, 'verse'], [6, 'verse'], [8, 'verse'], [10, 'verse'], [12, 'break'], [14, 'poster'],
-              [16, 'drop'], [18, 'drop'], [20, 'drop'], [22, 'drop'], [24, 'outro'], [26, 'outro']];
+              [16, 'drop'], [17, 'dropCam'], [18, 'drop'], [19, 'dropCam'], [20, 'drop'], [21, 'dropCam'], [22, 'drop'], [23, 'dropCam'], [24, 'outro'], [26, 'outro']];
 const SEED = +(new URLSearchParams(location.search).get('seed') || 0) || (Math.random() * 2 ** 31) | 0;
 const WPS = new Map();
 const wpTime = i => Math.floor(i / PLAN.length) * DUR + PLAN[((i % PLAN.length) + PLAN.length) % PLAN.length][0] * BAR;
-function copyWP(P) { return { v: { ...P.v }, L: P.L.map(L => ({ ...L })), bg: { ...P.bg, sky: P.bg.sky.slice(), gnd: P.bg.gnd.slice() }, bgKind: P.bgKind, lock: {}, win: {}, lockTall: null }; }
+function copyWP(P) { return { v: { ...P.v }, L: P.L.map(L => ({ ...L0, ...L })), bg: { ...P.bg, sky: P.bg.sky.slice(), gnd: P.bg.gnd.slice() }, bgKind: P.bgKind, lock: {}, win: {}, lockTall: null }; }
 function wp(i) {
   if (i < 0) i = 0;
   let W = WPS.get(i); if (W) return W;
@@ -1300,7 +1381,7 @@ function wp(i) {
   if (i === 0) {   // 最初：ポスターに近い、静かな地平線
     W = { v: posterV(), L: POSTER_L(), bgKind: 'night', bg: BGK.night(), lock: {}, win: {} };
     W.r = r; W.touched = new Set();
-    Object.assign(W.v, STYLES[pick(r, ['line', 'area', 'bar', 'thin'])]); W.v.cap = r() < 0.4 ? 1 : 0; W.v.count = pick(r, [64, 80, 100, 128]);
+    Object.assign(W.v, STYLES[pick(r, ['line', 'bar', 'thin', 'beam'])]); W.v.cap = r() < 0.4 ? 1 : 0; W.v.count = pick(r, [64, 80, 100, 128]);
     W.L[0].p = pick(r, [0, 1, 3]); if (r() < 0.5) { W.L[1].a = 1; W.L[1].p = pick(r, [1, 3, 4].filter(p => p !== W.L[0].p)); W.L[1].h = 1.05; }
     W.s = W.e = t;
   } else if (mood === 'poster') {
@@ -1309,9 +1390,20 @@ function wp(i) {
     W.lock = { yaw: 0, roll: 0, spin: 0, twPh: 0, coilPh: 0 };
     stagger(W, P, ['color', 'shape', 'coil', 'twist', 'trail', 'fly', 'style', 'layers', 'fx', 'spin', 'cam'], r, 0.75);
     W.s = t - 0.55 * (t - tp); W.e = t + 0.4 * (tn - t);
+  } else if (mood === 'dropCam') {   // サビの間の小節：カメラだけ動く（花火・噛み合わせの間はそのまま）
+    const P = wp(i - 1);
+    W = copyWP(P); W.motif = P.motif; W.lockTall = P.lockTall;
+    if (!P.motif || P.motif === 'dna') {
+      W.r = r; const ms = P.v.trail > 0.1 ? ['zoom', 'orbit'] : ['orbit', 'roll', 'zoom', 'tilt', 'flip', 'roll'], n = 1 + (r() < 0.5 ? 1 : 0);
+      shuffle(ms, r).slice(0, n).forEach(m => MOVES[m](W, r, MOODS.drop));
+      if (W.v.trail > 0.1 && W.v.fly < 0.5) { W.lock.roll = 0; W.lock.yaw = 0; W.v.rollSpd = 0; }
+    }
+    W.s = t - 0.55 * (t - tp); W.e = t + 0.4 * (tn - t);
+    stagger(W, P, ['cam'], r, 0.3);
   } else if (motifPlan(loop)[bar]) {   // モチーフ
     const P = wp(i - 1), name = motifPlan(loop)[bar];
-    W = copyWP(P); W.motif = name; MOTIFS[name](W, r);
+    W = copyWP(P); W.motif = name;
+    if (P.motif === name) W.lockTall = P.lockTall; else MOTIFS[name](W, r);
     W.s = t - 0.55 * (t - tp); W.e = t + 0.4 * (tn - t);
     stagger(W, P, ['shape', 'coil', 'layers', 'style', 'trail', 'color', 'fx', 'cam', 'spin', 'twist', 'fly'], r, 0.5);
   } else {
@@ -1323,6 +1415,7 @@ function wp(i) {
       run(pick(r, ['coil', 'trail', 'fly'])); run(pick(r, ['roll', 'zoom', 'flip'])); run('color'); if (r() < 0.6) run('style');
     } else {
       for (const f of M.force || []) run(f);
+    W.v.camLive = M.camLive ?? 0.6;
       const n = pick(r, M.n), w = { ...M.moves }, chosen = [];
       for (let k = 0; k < n; k++) { const m = W8(r, w); delete w[m]; chosen.push(m); }
       chosen.forEach(run);
@@ -1353,7 +1446,7 @@ function stagger(W, P, order, r, spread) {   // 変わったグループに、�
   const changed = new Set();
   for (const p in W.v) if (W.v[p] !== P.v[p]) changed.add(GROUP_OF[p]);
   if (W.L.some((L, j) => L.p !== P.L[j].p) || JSON.stringify(W.bg) !== JSON.stringify(P.bg)) changed.add('color');
-  if (W.L.some((L, j) => ['a', 'h', 'm', 'ox', 'oy', 'sc'].some(k => L[k] !== P.L[j][k]))) changed.add('layers');
+  if (W.L.some((L, j) => ['a', 'h', 'm', 'ox', 'oy', 'sc', 'rot', 'us'].some(k => L[k] !== P.L[j][k]))) changed.add('layers');
   const list = order.filter(g => changed.has(g)); for (const g of changed) if (!list.includes(g)) list.push(g);
   list.forEach((g, k) => {
     const o = Math.min(0.55, (list.length > 1 ? k / (list.length - 1) : 0) * spread + r() * 0.08), d = Math.min(1 - o, 0.42 + r() * 0.35);
@@ -1396,16 +1489,51 @@ function evalQ(c, dt, live) {
   Q.L = B.L.map((Lb0, j) => {
     const La0 = A.L[j], La = { ...La0, ...lpos(A, La0) }, Lb = { ...Lb0, ...lpos(B, Lb0) }, pa = PALS[La.p].c, pb = PALS[Lb.p].c;
     return { a: lerp(La.a, Lb.a, xL), h: lerp(La.h, Lb.h, xL), c0: mixH(pa[0], pb[0], xc), c1: mixH(pa[1], pb[1], xc),
-             ox: lerp(La.ox || 0, Lb.ox || 0, xL), oy: lerp(La.oy || 0, Lb.oy || 0, xL), sc: lerp(La.sc ?? 1, Lb.sc ?? 1, xL),
+             ox: lerp(La.ox || 0, Lb.ox || 0, xL), oy: lerp(La.oy || 0, Lb.oy || 0, xL), sc: lerp(La.sc ?? 1, Lb.sc ?? 1, xL), rot: lerp(La.rot || 0, Lb.rot || 0, xL), us: lerp(La.us || 0, Lb.us || 0, xL),
              ra: MODE_ROW(La.m, c), rb: MODE_ROW(Lb.m, c), rm: La.m === Lb.m ? 0 : xL };
   });
   Q.trailRows = []; for (let k = 1; k <= TMAX; k++) Q.trailRows[k] = rowAt(c - k * TRAIL_DT);
   // 拍に合わせて：キックで少し近づき、光が強まる。サビの頭は白く光る
   const pos = ((c % DUR) + DUR) % DUR, bt = Math.floor(pos / BEAT), ph = pos - bt * BEAT, p = live ? KICKS(Math.floor(bt / 4)) * Math.exp(-ph / 0.1) : 0;
-  Q.zoom *= 1 + 0.018 * p; Q.glow = Q.glow * (1 + 0.35 * p);
+  const cl = Q.camLive || 0;
+  if (live) { Q.zoom *= 1 + 0.06 * cl * Math.sin(c * 0.41 + 1.3); Q.pitch += 0.07 * cl * Math.sin(c * 0.27 + 0.4); Q.yaw += 0.07 * cl * Math.sin(c * 0.33); Q.roll += 0.03 * cl * Math.sin(c * 0.21 + 2); }
+  Q.zoom *= 1 + (0.018 + 0.03 * Math.max(0, cl - 0.8)) * p; Q.roll += 0.012 * cl * p * (bt % 2 ? 1 : -1); Q.glow = Q.glow * (1 + 0.35 * p);
   let fl = 0; if (live) for (const [b, a] of FLASHES) { const d = pos - b * BAR; if (d >= 0 && d < 1.2) fl = Math.max(fl, a * Math.exp(-d / 0.22)); }
   Q.flash = fl; Q.time = c;
+  if (live) { const F = burstsAt(c); Q.bursts = F.bursts; Q.streaks = F.streaks; for (const b of F.bursts) Q.flash = Math.max(Q.flash, 0.05 * Math.max(0, 1 - b.age / 0.15)); }
   return Q;
+}
+// ---------- 花火：拍ごとに打ち上がって、咲いた瞬間の音の形で開き、落ちながら消える ----------
+const HANABI_C = [['#fff1c4', '#ff8a2b'], ['#ffc4ef', '#ff2bd6'], ['#d4fdff', '#2be7ff'], ['#e6ffd0', '#36e86f'], ['#ffffff', '#ffd9a0'], ['#ead9ff', '#9d5cff'], ['#ffd0d0', '#ff3b3b'], ['#fffbe0', '#ffd23b']];   // [中心, 外側]
+function motifW(t, name) {   // その時刻にモチーフがどれだけ出ているか（0〜1）
+  let i = tc; while (i > 0 && wp(i).s > t) i--;
+  const B = wp(i), A = i > 0 ? wp(i - 1) : B, w = B.win.layers, span = Math.max(1e-3, B.e - B.s);
+  let x = 1; if (w && A !== B) { const s = B.s + w[0] * span, e = B.s + w[1] * span; x = ease((t - s) / Math.max(1e-3, e - s)); }
+  return (A.motif === name ? 1 - x : 0) + (B.motif === name ? x : 0);
+}
+function burstsAt(c) {
+  const bursts = [], streaks = [], LIFE = 2.6, wide = curAspect === 'wide', UP = 0.55;
+  for (let b = Math.floor((c - LIFE) / BEAT); b <= Math.floor((c + UP) / BEAT); b++) {
+    const r = mulberry(SEED + b * 977 + 13), nb = b % 4 === 0 ? 2 : r() < 0.7 ? 1 : 0;
+    for (let q = 0; q < nb; q++) {
+      const tq = b * BEAT + q * 0.13 + r() * 0.04;
+      const x = (r() * 2 - 1) * (wide ? 1.15 : 0.62), y = wide ? -0.12 + r() * 0.82 : -0.5 + r() * 1.45, sz = 0.28 + r() * 0.34;
+      const pal = HANABI_C[Math.floor(r() * HANABI_C.length)], seg = r() < 0.5 ? 1 : 0, n = 56 + Math.floor(r() * 44), w = 0.2 + r() * 0.16, len = 1.6 + r() * 0.6;
+      const age = c - tq;
+      if (age < -UP || age > LIFE || motifW(tq, 'hanabi') < 0.5) continue;
+      const P = pal;
+      if (age < 0) {   // 打ち上げの光の線
+        const k = 1 + age / UP, ys = y - 1.0 * Math.pow(1 - k, 2);
+        streaks.push({ p0: [x, ys - 0.16, 0], p1: [x, ys, 0], c: mixC3(rgb(P[1]), [1, 1, 1], 0.5), a: 0.75 * k });
+        continue;
+      }
+      const grow = 1 - Math.exp(-age / 0.11), s = sz * (0.22 + 0.78 * grow) * (1 + 0.12 * age);
+      const a = (age < 1.0 ? 1 : Math.exp(-(age - 1.0) / 0.5)) * (age > 1.1 ? 0.72 + 0.28 * Math.sin(age * 37 + b * 3.1 + q) : 1);
+      const hot = Math.max(0, 1 - age / 0.3);
+      bursts.push({ x, y: y - 0.06 * age * age, s, a, age, row: rowAt(tq + 0.02), c0: mixC3(rgb(P[0]), [1, 1, 1], hot * 0.5), c1: mixC3(rgb(P[1]), [1, 1, 1], hot * 0.7), seg, n, w, len });
+    }
+  }
+  return { bursts, streaks };
 }
 
 // =====================================================
