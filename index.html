@@ -116,6 +116,11 @@
   .songPick b { display: block; font-size: 17px; letter-spacing: .2em; font-weight: 600; }
   .songPick small { display: block; font-size: 10.5px; letter-spacing: .08em; opacity: .65; margin-top: 3px; }
   .songPick[data-song="hoshi"] { background: linear-gradient(160deg, #1a2350, #0b1030); color: var(--ink); border: 1px solid rgba(255,255,255,.35); }
+  .songPick[data-song="wa"] { background: linear-gradient(160deg, #b3191f, #6e0d12); color: #fff3df; border: 1px solid rgba(255,220,170,.45); }
+  .songPick[hidden] { display: none; }
+  #pickHint { font-size: 11.5px; letter-spacing: .05em; opacity: .55; margin: 14px 0 0; }
+  #songBtn[hidden] { display: none !important; }
+  .zt.locked span { opacity: .28; letter-spacing: .2em; }
   #songBtn { display: none; }
   body.playing #songBtn { display: inline-block; visibility: visible; }
   #loadMsg { font-size: 12px; opacity: .7; margin-top: 12px; min-height: 1.5em; letter-spacing: .04em; }
@@ -237,11 +242,13 @@
   <div class="box">
     <h1>AudioSpectGraphic</h1>
     <h2>音からビジュアルをつくる</h2>
-    <p>音楽に合わせて、音のスペクトラム（低い音から高い音までの大きさ）が<br>形を変えつづけ、ビジュアルが自動でつくられていきます。同じ絵は二度と出ません。<br>いろいろな形を「キャプチャー」して、図鑑をうめましょう。<br>図鑑から、タイトルを付けて保存・投稿できます。曲を選んでください。<small>※ 音が出ます</small></p>
+    <p>音楽に合わせて、音のスペクトラム（低い音から高い音までの大きさ）が<br>形を変えつづけ、ビジュアルが自動でつくられていきます。同じ絵は二度と出ません。<br>いろいろな形を「キャプチャー」して、図鑑をうめましょう。<br>図鑑から、タイトルを付けて保存・投稿できます。<small>※ 音が出ます</small></p>
     <div class="picks">
       <button class="songPick" data-song="fuji" disabled><b>富士山</b><small>シンセウェイブ・112BPM</small></button>
-      <button class="songPick" data-song="hoshi" disabled><b>星座</b><small>星空・96BPM</small></button>
+      <button class="songPick" data-song="hoshi" disabled hidden><b>星座</b><small>星空・96BPM</small></button>
+      <button class="songPick" data-song="wa" disabled hidden><b>和</b><small>琴と太鼓・80BPM</small></button>
     </div>
+    <p id="pickHint"></p>
     <div id="loadMsg"></div>
     <button class="linkbtn" id="galFromStart" hidden>みんなの作品を見る</button>
   </div>
@@ -738,46 +745,38 @@ function polyF(th, k) {   // 多角形の半径の割合（角で1、辺の真�
 }
 // ---------- レイヤーごとの形 ----------
 const RING_ROLL = 0.32;
-const FISH = (() => {   // 魚の輪郭（かんたんなイラスト）：鼻 → 背中 → しっぽ → おなか → 鼻
-  let p = [[1, 0], [0.85, 0.22], [0.55, 0.36], [0.15, 0.40], [-0.2, 0.33], [-0.48, 0.18], [-0.62, 0.08], [-0.9, 0.38], [-1, 0.42], [-0.86, 0],
-           [-1, -0.42], [-0.9, -0.38], [-0.62, -0.08], [-0.48, -0.18], [-0.2, -0.30], [0.15, -0.34], [0.55, -0.30], [0.85, -0.18]];
-  for (let it = 0; it < 3; it++) { const q = []; for (let k = 0; k < p.length; k++) { const a = p[k], b = p[(k + 1) % p.length]; q.push([a[0] * 0.75 + b[0] * 0.25, a[1] * 0.75 + b[1] * 0.25], [a[0] * 0.25 + b[0] * 0.75, a[1] * 0.25 + b[1] * 0.75]); } p = q; }
+function outline(p, iters) {   // 輪郭の点 → なめらかにして、同じ間隔の SAMP 点に（鼻先から反時計まわり）
+  for (let it = 0; it < iters; it++) { const q = []; for (let k = 0; k < p.length; k++) { const a = p[k], b = p[(k + 1) % p.length]; q.push([a[0] * 0.75 + b[0] * 0.25, a[1] * 0.75 + b[1] * 0.25], [a[0] * 0.25 + b[0] * 0.75, a[1] * 0.25 + b[1] * 0.75]); } p = q; }
   let s0 = 0; p.forEach((q, k) => { if (q[0] > p[s0][0]) s0 = k; }); p = p.slice(s0).concat(p.slice(0, s0)); p.push(p[0]);
   const cum = [0]; for (let k = 1; k < p.length; k++) cum.push(cum[k - 1] + Math.hypot(p[k][0] - p[k - 1][0], p[k][1] - p[k - 1][1]));
   const L = cum[cum.length - 1], x = new Float32Array(SAMP), y = new Float32Array(SAMP), nx = new Float32Array(SAMP), ny = new Float32Array(SAMP);
   let k = 0;
   for (let i = 0; i < SAMP; i++) { const d = L * i / (SAMP - 1); while (k < p.length - 2 && cum[k + 1] < d) k++; const t = (d - cum[k]) / (cum[k + 1] - cum[k] || 1); x[i] = p[k][0] + (p[k + 1][0] - p[k][0]) * t; y[i] = p[k][1] + (p[k + 1][1] - p[k][1]) * t; }
   for (let i = 0; i < SAMP; i++) { const a = i === 0 ? SAMP - 2 : i - 1, b = i === SAMP - 1 ? 1 : i + 1; let tx = x[b] - x[a], ty = y[b] - y[a]; const l = Math.hypot(tx, ty) || 1; nx[i] = ty / l; ny[i] = -tx / l; }
-  const km = new Float32Array(SAMP);   // くぼんだところ（しっぽの付け根・切れこみ）は棒を短く：交差しないように
-  for (let i = 0; i < SAMP; i++) {
-    const a = (i - 5 + SAMP - 1) % (SAMP - 1), b = (i + 5) % (SAMP - 1);
-    const cr = (x[i] - x[a]) * (y[b] - y[i]) - (y[i] - y[a]) * (x[b] - x[i]);
-    km[i] = cr < 0 ? Math.max(0.15, 1 - (-cr) * 900) : 1;
-  }
-  for (let it = 0; it < 3; it++) { const t = km.slice(); for (let i = 0; i < SAMP; i++) km[i] = Math.min(t[i], t[(i + 1) % (SAMP - 1)], t[(i + SAMP - 2) % (SAMP - 1)]); }
-  for (let it = 0; it < 4; it++) { const t = km.slice(); for (let i = 0; i < SAMP; i++) km[i] = (t[(i + SAMP - 2) % (SAMP - 1)] + 2 * t[i] + t[(i + 1) % (SAMP - 1)]) / 4; }
-  return { x, y, nx, ny, km };
-})();
+  return { x, y, nx, ny };
+}
+// 魚の輪郭（かんたんなイラスト）：鼻 → 背中 → しっぽ → おなか → 鼻
+const FISH = outline([[1, 0], [0.85, 0.22], [0.55, 0.36], [0.15, 0.40], [-0.2, 0.33], [-0.48, 0.18], [-0.62, 0.08], [-0.9, 0.38], [-1, 0.42], [-0.86, 0],
+  [-1, -0.42], [-0.9, -0.38], [-0.62, -0.08], [-0.48, -0.18], [-0.2, -0.30], [0.15, -0.34], [0.55, -0.30], [0.85, -0.18]], 3);
+// バショウカジキ：細長い吻、頭のうしろから続く帆のような背びれ（ふちは波打つ）、深い三日月形の尾、長い腹びれ
+const SAIL = outline([[1.0, 0], [0.64, 0.028], [0.5, 0.085], [0.42, 0.13], [0.38, 0.5], [0.33, 0.64], [0.24, 0.6], [0.16, 0.66], [0.06, 0.58], [-0.04, 0.6], [-0.14, 0.5], [-0.24, 0.46], [-0.33, 0.32], [-0.4, 0.17],
+  [-0.52, 0.1], [-0.66, 0.05], [-0.8, 0.2], [-0.92, 0.36], [-1.0, 0.44], [-0.9, 0.18], [-0.82, 0], [-0.9, -0.18], [-1.0, -0.44], [-0.92, -0.36], [-0.8, -0.2], [-0.66, -0.05],
+  [-0.5, -0.1], [-0.36, -0.2], [-0.3, -0.12], [-0.05, -0.16], [0.2, -0.17], [0.14, -0.44], [0.26, -0.2], [0.42, -0.11], [0.56, -0.04], [0.64, -0.022]], 1);
+// リュウグウノツカイ：とても細長い帯のような体、頭にとさか、尾は細くとがる
+const OAR = outline([[1.0, 0], [0.95, 0.1], [0.84, 0.16], [0.6, 0.17], [0.2, 0.16], [-0.4, 0.14], [-1.0, 0.11], [-1.6, 0.08], [-2.1, 0.045], [-2.4, 0],
+  [-2.1, -0.03], [-1.6, -0.06], [-1.0, -0.09], [-0.4, -0.12], [0.2, -0.14], [0.6, -0.15], [0.84, -0.14], [0.95, -0.07]], 2);
 const KOUT = new Float32Array(7);
 // 魚の派生：バショウカジキ（背びれと吻がのびる）・リュウグウノツカイ（長くのびて、ゆらゆら）
-function fishShape(Q, LL, out) {
-  const F = FISH, va = Math.round(LL.kp2 || 0), e = va ? clamp(LL.kp1 || 0) : 0, tm = Q.time || 0;
+function fishShape(Q, LL, out) {   // 魚 → 派生（バショウカジキ・リュウグウノツカイ）へ、輪郭ごと変わる
+  const F = FISH, va = Math.round(LL.kp2 || 0), e = va ? clamp(LL.kp1 || 0) : 0, Tg = va === 1 ? SAIL : va === 2 ? OAR : null, tm = Q.time || 0;
   const f = out.fish || (out.fish = { x: new Float32Array(SAMP), y: new Float32Array(SAMP), z: new Float32Array(SAMP), nx: new Float32Array(SAMP), ny: new Float32Array(SAMP), km: new Float32Array(SAMP) });
   for (let i = 0; i < SAMP; i++) {
-    const u = i / (SAMP - 1), du = Math.min(u, 1 - u), top = u < 0.5;
-    let x = F.x[i], y = F.y[i]; const x0 = x;
-    if (va === 1 && e > 0) {   // バショウカジキ：長い吻、大きな背びれ（帆）、深い尾
-      x += e * 0.78 * Math.exp(-((du / 0.032) ** 2)); y *= 1 - e * 0.85 * Math.exp(-((du / 0.05) ** 2));
-      if (top && x0 > -0.58 && x0 < 0.66) { const sp = x0 > 0.42 ? smooth01(0.66, 0.42, x0) : 0.15 + 0.85 * smooth01(-0.58, 0.42, x0); y += e * 0.72 * sp * (0.92 + 0.08 * Math.sin(tm * 3 + x0 * 6)); }
-      if (x0 < -0.78) y *= 1 + 0.35 * e;
-      x *= 1 + 0.08 * e;
-    } else if (va === 2 && e > 0) {   // リュウグウノツカイ：頭はそのまま、体が長く細く、尾はとがる。ゆらゆら
-      if (x0 < 0.55) x = 0.55 + (x0 - 0.55) * (1 + 1.25 * e);
-      y *= 1 - e * (0.5 * smooth01(0.45, 0.1, x0) + 0.4 * smooth01(-0.55, -0.95, x0));
-      y += e * 0.11 * Math.sin(tm * 2.1 - x * 2.3) * smooth01(0.5, -0.2, x);
-    }
+    let x = F.x[i], y = F.y[i];
+    if (Tg && e > 0) { x += (Tg.x[i] - x) * e; y += (Tg.y[i] - y) * e; }
+    if (va === 1 && e > 0 && y > 0.2) y += e * 0.025 * Math.sin(tm * 3 + x * 7);   // 帆がそよぐ
+    if (va === 2 && e > 0) y += e * 0.12 * Math.sin(tm * 2.1 - x * 1.9) * smooth01(0.6, -0.2, x);   // 体をくねらせて、ゆらゆら
     f.x[i] = x; f.y[i] = y;
-    const tw = Math.max(0, -x0 - 0.05) / 1.05; f.z[i] = 0.17 * Math.pow(tw, 1.6) * Math.sin(tm * 4.2 - x0 * 2.5) * (1 - 0.6 * (va === 2 ? e : 0));
+    const tw = Math.max(0, -x - 0.05) / 1.05; f.z[i] = 0.17 * Math.pow(Math.min(1, tw), 1.6) * Math.sin(tm * 4.2 - x * 2.5) * (1 - (va === 2 ? e : 0));
   }
   for (let i = 0; i < SAMP; i++) {
     const a = i === 0 ? SAMP - 2 : i - 1, b = i === SAMP - 1 ? 1 : i + 1; let tx = f.x[b] - f.x[a], ty = f.y[b] - f.y[a]; const l = Math.hypot(tx, ty) || 1;
@@ -787,10 +786,12 @@ function fishShape(Q, LL, out) {
   }
   const t = f.km.slice(); for (let i = 0; i < SAMP; i++) f.km[i] = Math.min(t[i], t[(i + 1) % (SAMP - 1)], t[(i + 3) % (SAMP - 1)], t[(i + SAMP - 2) % (SAMP - 1)], t[(i + SAMP - 4) % (SAMP - 1)]);
   for (let it = 0; it < 3; it++) { const q = f.km.slice(); for (let i = 0; i < SAMP; i++) f.km[i] = (q[(i + SAMP - 2) % (SAMP - 1)] + 2 * q[i] + q[(i + 1) % (SAMP - 1)]) / 4; }
-  if (va === 2 && e > 0) for (let i = 0; i < SAMP / 2; i++) f.km[i] *= 1 + e * 1.4 * Math.exp(-(((f.x[i] - 0.42) / 0.16) ** 2));   // 頭のとさか（赤い長い棒）
-  if (va === 1 && e > 0) for (let i = 0; i < SAMP; i++) { const du = Math.min(i, SAMP - 1 - i) / (SAMP - 1); f.km[i] *= 1 - 0.6 * e * Math.exp(-((du / 0.05) ** 2)); }   // 吻の棒は短め
+  if (e > 0) for (let i = 0; i < SAMP; i++) {
+    const x = f.x[i], y = f.y[i], top = y > 0;
+    if (va === 1) { if (x > 0.5) f.km[i] *= 1 - 0.75 * e; else if (!top && x > -0.6) f.km[i] *= 1 - 0.4 * e; }   // 吻とおなかの棒は短く（帆と尾を目立たせる）
+    else { f.km[i] *= top ? 1 - 0.55 * e + e * 3.6 * Math.exp(-(((x - 0.7) / 0.14) ** 2)) : (1 - 0.7 * e) * (1 + e * 5 * Math.exp(-(((x - 0.6) / 0.06) ** 2))); }   // 頭のとさかと、腹びれ（長い糸）
+  }
 }
-// うにの分裂（4・8・16）：同じ形を小さく並べる
 // うにの分裂：1→2→4→8→16 と倍々に。子は親の場所から生まれて、自分の場所へ
 const CP_S = { 1: 1, 2: 0.62, 4: 0.5, 8: 0.36, 16: 0.27 };
 function cpGrid(n, asp) { const t = asp < 1; return n === 2 ? (t ? [1, 2] : [2, 1]) : n === 4 ? [2, 2] : n === 8 ? (t ? [2, 4] : [4, 2]) : n >= 16 ? [4, 4] : [1, 1]; }
@@ -854,6 +855,27 @@ function kindAt(Q, LL, k, i, u, lr, j) {   // [x, y, z, nx, ny, nz, 棒の長さ
     const R = LL.kp2 || 0.55, np = LL.kp1 || 0, ph = TAU_E * u + lr, cp = Math.cos(ph), sp = Math.sin(ph), nl = Math.hypot(0.14, 1);
     o[0] = R * cp; o[1] = -0.22; o[2] = R * sp; o[3] = 0.14 * cp / nl; o[4] = 1 / nl; o[5] = 0.14 * sp / nl;
     o[6] = np ? 0.3 + 0.7 * Math.pow(Math.abs(Math.cos(ph * np / 2)), 2.5) : 1;
+  } else if (k === 11) {   // 新体操のリボン：長い帯が空中でらせんや波を描いて舞う（帯の幅は音で波打つ）
+    const sm = clamp(LL.kp2 || 0), ph = LL.kp1 || 0, P = s => { const env = 0.22 + 0.78 * s, w = TAU_E * 1.45 * s - 2.1 * tm + ph;
+      return [1.8 * (s - 0.5) + 0.14 * Math.sin(w * 0.5), env * (0.42 * Math.sin(w) * (1 - sm) + 0.5 * Math.sin(w * 0.8) * sm), env * 0.36 * Math.cos(w) * (1 - sm)]; };
+    const p = P(u), q = P(Math.min(1, u + 0.004)), r0 = u >= 0.996 ? P(u - 0.004) : null;
+    let tx = r0 ? p[0] - r0[0] : q[0] - p[0], ty = r0 ? p[1] - r0[1] : q[1] - p[1], tz = r0 ? p[2] - r0[2] : q[2] - p[2]; const tl = Math.hypot(tx, ty, tz) || 1; tx /= tl; ty /= tl; tz /= tl;
+    const tw = TAU_E * 0.6 * u - 1.1 * tm + ph; let ax = 0, ay = Math.cos(tw), az = Math.sin(tw); const d = ax * tx + ay * ty + az * tz; ax -= d * tx; ay -= d * ty; az -= d * tz; const al = Math.hypot(ax, ay, az) || 1;
+    o[0] = p[0]; o[1] = p[1]; o[2] = p[2]; o[3] = ax / al; o[4] = ay / al; o[5] = az / al; o[6] = 0.55 + 0.45 * smooth01(0, 0.08, u);
+  } else if (k === 12) {   // 寿司のシャリ：横長のだ円体をらせんでおおう（つぶつぶの米）
+    const T = 9, th = Math.PI * (0.04 + 0.92 * u), ph = TAU_E * T * u + lr, sx = 0.55, sy = 0.2, sz = 0.3;
+    const nx0 = Math.sin(th) * Math.cos(ph), ny0 = Math.cos(th), nz0 = Math.sin(th) * Math.sin(ph);
+    o[0] = sx * nx0; o[1] = sy * ny0; o[2] = sz * nz0; const nl = Math.hypot(nx0 / sx, ny0 / sy, nz0 / sz); o[3] = nx0 / sx / nl; o[4] = ny0 / sy / nl; o[5] = nz0 / sz / nl; o[6] = ny0 > -0.2 ? 1 : 0.4;
+  } else if (k === 13) {   // 寿司のネタ：シャリの上をおおう切り身（左右に何度も往復して面にする）
+    const rows = 7, f = u * rows, r = Math.floor(Math.min(rows - 1e-6, f)), t = f - r, xx = (r % 2 ? 1 - t : t) * 2 - 1;
+    const x = 0.62 * xx, zz = (r / (rows - 1)) * 2 - 1, z = 0.32 * zz, bump = Math.max(0, 1 - xx * xx * 0.55 - zz * zz * 0.5);
+    o[0] = x; o[1] = 0.2 * Math.sqrt(bump) + 0.035; o[2] = z; o[3] = 0; o[4] = 1; o[5] = 0; o[6] = 1;
+  } else if (k === 14) {   // 桜：5まいの花びら（先に小さな切れこみ）から外向きの棒
+    const R = LL.kp2 || 0.5, th = TAU_E * u + lr, rr = th => { const sv = Math.abs(Math.sin(2.5 * th)), fr = (2.5 * th / Math.PI) % 1, nt = Math.exp(-(((fr - 0.5) / 0.045) ** 2));
+      return R * (0.42 + 0.58 * Math.pow(sv, 0.55) - 0.16 * nt); };
+    const r0 = rr(th), r1 = rr(th + 1e-3), x0 = r0 * Math.sin(th), y0 = r0 * Math.cos(th), x1 = r1 * Math.sin(th + 1e-3), y1 = r1 * Math.cos(th + 1e-3);
+    let tx = x1 - x0, ty = y1 - y0; const tl = Math.hypot(tx, ty) || 1;
+    o[0] = x0; o[1] = y0; o[2] = 0.05 * Math.sin(th * 5 + tm); o[3] = -ty / tl; o[4] = tx / tl; o[5] = 0; o[6] = 0.6 + 0.4 * Math.pow(Math.abs(Math.sin(2.5 * th)), 2);
   } else {   // 魚：輪郭にそって外向きの棒。しっぽがゆれる（派生：バショウカジキ・リュウグウノツカイ）
     const F = LL._fish, S = 0.95, c = Math.cos(lr), s = Math.sin(lr);
     const x = F.x[i] * S, y = F.y[i] * S + 0.035 * Math.max(0, -FISH.x[i] - 0.05) / 1.05 * Math.sin(tm * 4.2 - FISH.x[i] * 2.5 + 1);
@@ -964,7 +986,7 @@ function camOf(Q, shapes, asp) {
   shapes.forEach((sh, j) => {
     const L = Q.L[j], wgt = j === 0 ? 1 : smooth01(0.05, 0.7, L.a);
     let bx0 = 1e9, bx1 = -1e9, by0 = 1e9, by1 = -1e9, bz0 = 1e9, bz1 = -1e9, qx0 = 1e9, qx1 = -1e9, qy0 = 1e9, qy1 = -1e9;
-    const P = sh.P, N = sh.N, hm = HW * Q.bar * Math.max(L.h, Q.hMax * (j ? 0 : 1)) * (L.sc ?? 1) * (1 + (Q.base || 0));
+    const P = sh.P, N = sh.N, hm = HW * Q.bar * Math.max(L.h, Q.hMax * (j ? 0 : 1)) * (L.sc ?? 1) * (1 + (Q.base || 0) + (L.bs || 0));
     for (let i = 0; i < SAMP; i += 4) {
       const o = i * 6;
       for (const k of [0, 1]) {
@@ -1095,7 +1117,7 @@ function engRender(E, Q, W, H, target) {
   if (cpW > 0.001 && Q.cpN > 1) {
     const C = cpLayout(Q.cpN, asp, Q.cpPh ?? 1), sc = 1 + (C.s - 1) * cpW, rows = Q.cpRows || [];
     copies = C.pos.map((p, k) => { const m = M4.id(); m[0] = m[5] = m[10] = sc; m[12] = p[0] * cpW; m[13] = p[1] * cpW; m[14] = p[2] * cpW;
-      return { m, a: (k === 0 ? 1 : smooth01(0, 0.35, cpW)) * C.a[k], row: k ? rows[k] : undefined, swap: k % 2 === 1, depth: M4.xf(VP, [p[0] * cpW, p[1] * cpW, p[2] * cpW])[2] }; });
+      return { m, cols: Q.cpCols && Q.cpCols[k], a: (k === 0 ? 1 : smooth01(0, 0.35, cpW)) * C.a[k], row: k ? rows[k] : undefined, swap: k % 2 === 1, depth: M4.xf(VP, [p[0] * cpW, p[1] * cpW, p[2] * cpW])[2] }; });
     copies.sort((p, q) => q.depth - p.depth);
   }
   const order = ringJ > 0 && shapes[ringJ].kw > 0.5 ? [2, 1, 0].filter(j => j !== ringJ).concat([ringJ]) : [2, 1, 0];
@@ -1105,7 +1127,8 @@ function engRender(E, Q, W, H, target) {
     gl.uniform1i(U.uRA, o.ra ?? L.ra); gl.uniform1i(U.uRB, o.rb ?? L.rb); gl.uniform1f(U.uRM, o.rm ?? L.rm); gl.uniform1f(U.uShift, L.us || 0); gl.uniform1f(U.uShade, o.shade ?? 1);
     gl.uniform1f(U.uH, HW * Q.bar * L.h * (L.sc ?? 1) * (o.hm || 1)); gl.uniform1f(U.uEnv, o.env || 1); gl.uniform1f(U.uPad, HW * 0.06);
     gl.uniform1f(U.uLen, sh.len); gl.uniform3fv(U.uOff, o.off || [0, 0, 0]);
-    const c0 = o.swap ? mixC3(L.c1, L.c0, 0.35) : L.c0, c1 = o.swap ? mixC3(L.c0, L.c1, 0.35) : L.c1;   // 分裂したものは色を少し入れかえる
+    const c0 = o.c0 || (o.swap ? mixC3(L.c1, L.c0, 0.35) : L.c0), c1 = o.c1 || (o.swap ? mixC3(L.c0, L.c1, 0.35) : L.c1);   // 分裂したものは色を少し入れかえる（合体のときは、それぞれの色）
+    gl.uniform1f(U.uTaper, clamp((Q.taper || 0) + (L.tp || 0))); gl.uniform1f(U.uBase, (Q.base || 0) + (L.bs || 0));
     gl.uniform3fv(U.uC0, c0); gl.uniform3fv(U.uC1, c1); gl.uniform3fv(U.uCapC, capC);
     gl.uniform3fv(U.uPeakC, dark > 0.5 ? mixC3(c1, [1, 1, 1], 0.5) : c1);
     gl.uniform1f(U.uCap, o.flat ? 0 : Q.cap); gl.uniform1f(U.uPeak, o.flat ? 0 : Q.peak); gl.uniform1f(U.uSpine, o.flat || o.refl ? 0 : Q.spine || 0);
@@ -1132,7 +1155,7 @@ function engRender(E, Q, W, H, target) {
       for (const it of list) { const row = trailRows[it.k] ?? 4; if (it.a > 0.003 && it.depth > 0.01) draw(j, { a: it.a, off: [0, 0, it.z], m: it.m, ra: row, rb: row, rm: 0 }); }
     }
     for (const cp of copies) {   // 分裂したときは、小さく並べて何度も描く（遠いものから）
-      const cd = (o) => draw(j, cp.m ? { ...o, a: o.a * cp.a, m: o.m ? M4.mul(cp.m, o.m) : cp.m, ra: cp.row ?? o.ra, rb: cp.row ?? o.rb, rm: cp.row !== undefined ? 0 : o.rm, swap: cp.swap } : o);
+      const cc = cp.cols && cp.cols[j], cd = (o) => draw(j, cp.m ? { ...o, a: o.a * cp.a, m: o.m ? M4.mul(cp.m, o.m) : cp.m, ra: cp.row ?? o.ra, rb: cp.row ?? o.rb, rm: cp.row !== undefined ? 0 : o.rm, swap: !cc && cp.swap, c0: cc && cc[0], c1: cc && cc[1] } : o);
       if (reflA > 0.003 && !cp.m) draw(j, { a: L.a, refl: reflA });
       if (Q.echo > 0.003) { cd({ a: L.a * 0.12 * Q.echo, hm: 1.24, flat: 1 }); cd({ a: L.a * 0.25 * Q.echo, hm: 1.12, flat: 1 }); }
       const th = Q.thick || 0;
@@ -1154,8 +1177,11 @@ function engRender(E, Q, W, H, target) {
         gl.uniform1f(U.uH, HW * b.len * l0); gl.uniform1f(U.uEnv, 1); gl.uniform1f(U.uPad, HW * 0.06); gl.uniform1f(U.uLen, sh.len); gl.uniform3fv(U.uOff, [0, 0, 0]);
         gl.uniform3fv(U.uC0, b.c0); gl.uniform3fv(U.uC1, b.c1); gl.uniform3fv(U.uCapC, capC); gl.uniform3fv(U.uPeakC, mixC3(b.c1, [1, 1, 1], 0.6));
         gl.uniform1f(U.uCap, 0); gl.uniform1f(U.uPeak, k ? 0 : 1); gl.uniform1f(U.uFlat, k ? 1 : 0); gl.uniform1f(U.uA, b.a * af);
-        gl.uniform1f(U.uRefl, 0); gl.uniformMatrix4fv(U.uM, false, m);
-        gl.bindVertexArray(sh.vao); gl.drawArrays(gl.TRIANGLE_STRIP, 0, SAMP * 2);
+        gl.uniform1f(U.uRefl, 0); gl.bindVertexArray(sh.vao);
+        for (const cp of copies) {   // 分裂したまま花火：並んだぶんだけ咲く
+          gl.uniformMatrix4fv(U.uM, false, cp.m ? M4.mul(cp.m, m) : m); gl.uniform1f(U.uA, b.a * af * (cp.a ?? 1));
+          gl.drawArrays(gl.TRIANGLE_STRIP, 0, SAMP * 2);
+        }
       }
     }
   }
@@ -1164,7 +1190,7 @@ function engRender(E, Q, W, H, target) {
     const sh = shapes[0], L = Q.L[0], P = sh.P, N = sh.N, H0 = HW * Q.bar * L.h * (L.sc ?? 1), ca = Q.cons.a;
     const at = (u, sd, v) => { const f = clamp(u) * (SAMP - 1), i = Math.min(SAMP - 2, Math.floor(f)), t = f - i, o = i * 6, q = o + 6, hh = sd * v * H0 * (sd < 0 ? Q.dual || 0 : 1);
       return [0, 1, 2].map(d => P[o + d] + (P[q + d] - P[o + d]) * t + N[o + d] * hh); };
-    const pts = Q.cons.pts.map(([u, sd, v]) => at(u, sd, v)), col = [0.86, 0.94, 1];
+    const pts = Q.cons.pts.map(([u, sd, v]) => at(u, sd, v)), col = Q.cons.col || [0.86, 0.94, 1];
     drawSegs(E, VP, W, H, Q.cons.edges.map(([a, b]) => [pts[a], pts[b]]), col, 0.85 * ca, px * 2.2);
     const I = M4.id(), cr = [];
     pts.forEach((p, k) => { const c = M4.xf(VP, p); if (c[2] <= 0) return; const tw = 1 + 0.25 * Math.sin((Q.time || 0) * 5 + k * 2.1), rx = 15 * px * tw * 2 / W, ry = 15 * px * tw * 2 / H;
@@ -1343,12 +1369,31 @@ const SONGS = {
     slots: [{ starts: [4, 6], last: 8 }, { starts: [14, 16], long: [14], last: 18 }],
     kicks: bar => bar >= 4 && bar < 10 ? 0.35 : bar >= 14 && bar < 20 ? 0.9 : bar >= 20 && bar < 22 ? 0.3 : 0,
     flashes: [[14, 0.38], [4, 0.1], [20, 0.08]], seqOff: 7, fastLead: 0.1,
+    lineCol: [0.86, 0.94, 1], look: { pals: [4, 0, 1, 3], bgs: ['night', 'navy', 'deep', 'night'] },   // 形の音は、低いレの倍音を重ねた音（曲の主音）
     moods: {   // 星空の曲：背景は夜の色が多め
       intro: { bgs: { night: 4, navy: 2, deep: 2, black: 1 } },
       verse: { bgs: { night: 3, navy: 2, deep: 2, black: 1, sea: 0.6, vivid: 0.6, light: 0.3 } },
       break: { bgs: { navy: 2, deep: 2, night: 2 }, pals: [4, 0, 1, 3, 6], styles: ['line', 'bar', 'thin', 'dot', 'beam'], fxPool: ['glow', 'stars', 'peak', 'echo', 'refl', 'cap'] },
       drop: { bgs: { night: 3, black: 2, deep: 1.5, vivid: 1 } },
       outro: { bgs: { night: 2, deep: 2, navy: 1, warm: 1 } },
+    } },
+  wa: { key: 'wa', name: '和', file: 'song3.m4a', BPM: 80, BARS: 20,   // 60秒。琴・尺八・笙・太鼓。イントロ・ブレイク・アウトロの最後の一拍に「和の形の音」
+    SECTIONS: [{ key: 'intro', n: 'イントロ', from: 0, to: 4 }, { key: 'verse', n: 'Aメロ', from: 4, to: 8 }, { key: 'break', n: 'ブレイク', from: 8, to: 12 },
+               { key: 'drop', n: 'サビ', from: 12, to: 18 }, { key: 'outro', n: 'アウトロ', from: 18, to: 20 }],
+    PLAN: [[0, 'intro'], [2, 'cons'], [4, 'verse'], [6, 'verse'], [8, 'break'], [10, 'cons'],
+           [12, 'drop'], [13, 'dropCam'], [14, 'drop'], [15, 'dropCam'], [16, 'drop'], [17, 'dropCam'], [18, 'cons']],
+    scenes: { 2: 3, 10: 11, 18: 19 },
+    fast: [0, 4, 12],
+    slots: [{ starts: [4], last: 6 }, { starts: [12, 14], long: [12], last: 16 }],
+    kicks: bar => bar >= 4 && bar < 8 ? 0.4 : bar >= 12 && bar < 18 ? 1 : 0,
+    flashes: [[12, 0.4], [4, 0.1]], seqOff: 13, fastLead: 0.1,
+    lineCol: [1, 0.8, 0.42], look: { pals: [7, 6, 'sensu', 7], bgs: ['paper', 'warm', 'black', 'paper'] },
+    moods: {
+      intro: { bgs: { paper: 2, warm: 1.5, black: 1, night: 1 } },
+      verse: { bgs: { paper: 2, warm: 2, black: 1, vivid: 0.6 } },
+      break: { bgs: { paper: 3, white: 1, warm: 1 } },
+      drop: { bgs: { black: 2, warm: 2, vivid: 1.5, night: 1 } },
+      outro: { bgs: { warm: 2, paper: 2 } },
     } },
 };
 let SG = SONGS.fuji, BEAT = 0, BAR = 0, DUR = 0, PLAN = SG.PLAN, T = null;
@@ -1408,10 +1453,13 @@ function motifTick() {
     if (S < c - 0.02 || S - c > 2 || motifDone.has(key)) continue;
     motifDone.add(key);
     const at = t0 + (S - clockBase), h = ev.id === 'fuji' ? CFG.hold : CONS_HOLD, r = 0.012;
-    const src = actx.createBufferSource(); src.buffer = motifBuffer(ev.id); src.loop = true;
-    const g = actx.createGain(); g.gain.value = 0;
-    g.gain.setValueAtTime(0, at); g.gain.linearRampToValueAtTime(FUJI_LEVEL, at + r); g.gain.setValueAtTime(FUJI_LEVEL, at + r + h); g.gain.linearRampToValueAtTime(0, at + 2 * r + h);
-    src.connect(g); g.connect(analyser); src.start(Math.max(actx.currentTime, at - 0.05)); src.stop(at + 2 * r + h + 0.05);
+    const bf = motifBuffer(ev.id), src = actx.createBufferSource(); src.buffer = bf; src.loop = !bf.tonal;
+    const g = actx.createGain();
+    if (bf.tonal) { g.gain.value = FUJI_LEVEL; src.connect(g); g.connect(analyser); src.start(Math.max(actx.currentTime, at), Math.max(0, actx.currentTime - at)); }   // 和音は、そのまま鳴らす（音の中に立ち上がりと余韻）
+    else {
+      g.gain.value = 0; g.gain.setValueAtTime(0, at); g.gain.linearRampToValueAtTime(FUJI_LEVEL, at + r); g.gain.setValueAtTime(FUJI_LEVEL, at + r + h); g.gain.linearRampToValueAtTime(0, at + 2 * r + h);
+      src.connect(g); g.connect(analyser); src.start(Math.max(actx.currentTime, at - 0.05)); src.stop(at + 2 * r + h + 0.05);
+    }
     motifNodes.push(src, g); if (motifNodes.length > 24) motifNodes.splice(0, motifNodes.length - 24);
   }
 }
@@ -1436,7 +1484,22 @@ function specBuffer(db) {   // 周期を解析の窓の長さにそろえ、成�
   for (let i = 0; i < L; i++) d[i] = re[i] / mx * 0.6;
   return buf;
 }
-function motifBuffer(id) { return motifBufs[id] || (motifBufs[id] = specBuffer(id === 'fuji' ? FUJI_DB : MOTIFS[id].db)); }
+function tonalBuffer(db) {   // 星座・和の形の音：低いレ（D1）の倍音を重ねた澄んだ音。倍音の大きさで形をつくる（ノイズではないので音程がある）
+  const sr = actx.sampleRate, P = Math.round(sr / 36.71), f0 = sr / P, dur = 0.78, n = Math.floor(sr * dur), l0 = Math.log(F_MIN), l1 = Math.log(F_MAX);
+  const per = new Float32Array(P);   // 1周期ぶんをつくって、くり返す（左右は同じ音：解析は左右を足すので、ずらすと倍音が打ち消し合って形がくずれる）
+  for (let h = 1; h * f0 < F_MAX * 1.02; h++) {
+    const fq = h * f0; if (fq < F_MIN * 0.97) continue;
+    const x = clamp((Math.log(fq) - l0) / (l1 - l0) * K - 0.5, 0, K - 1), k0 = Math.floor(x), k1 = Math.min(K - 1, k0 + 1), fr = x - k0;
+    const a = Math.pow(10, (db[k0] * (1 - fr) + db[k1] * fr) / 20), ph = Math.random() * TAU, w = TAU * h / P;
+    for (let i = 0; i < P; i++) per[i] += a * Math.sin(w * i + ph);
+  }
+  const buf = actx.createBuffer(2, n, sr), d = buf.getChannelData(0); let mx = 0;
+  for (let i = 0; i < n; i++) { const t = i / sr, e = Math.min(1, t / 0.012) * (t < 0.36 ? 1 : Math.exp(-(t - 0.36) / 0.12)); d[i] = per[i % P] * e; mx = Math.max(mx, Math.abs(d[i])); }
+  for (let i = 0; i < n; i++) d[i] *= 0.62 / (mx || 1);
+  buf.getChannelData(1).set(d);
+  buf.tonal = true; return buf;
+}
+function motifBuffer(id) { return motifBufs[id] || (motifBufs[id] = id === 'fuji' ? specBuffer(FUJI_DB) : tonalBuffer(MOTIFS[id].db)); }
 
 // =====================================================
 //  スペクトラム → 山並み（いま・ゆっくり・ピークを残す・少し前・過去）
@@ -1538,6 +1601,8 @@ const P_CONE = PALS.push({ n: 'コーン', c: ['#9a5a24', '#f0c27a'] }) - 1;
 const P_SAIL = PALS.push({ n: 'カジキ', c: ['#1b4aa6', '#a9dcff'] }) - 1, P_OAR = PALS.push({ n: 'リュウグウノツカイ', c: ['#f3f0ec', '#ff2a3a'] }) - 1;
 const P_AURORA = PALS.push({ n: 'オーロラ', c: ['#2bff9a', '#b45cff'] }) - 1, P_AURORA2 = PALS.push({ n: 'オーロラ2', c: ['#3fd0ff', '#ff5cc8'] }) - 1;
 const P_GOLD = PALS.push({ n: '金', c: ['#a8741c', '#ffe08a'] }) - 1, P_JEWEL = PALS.push({ n: '宝石', c: ['#c2103a', '#7fd8ff'] }) - 1;
+const P_RICE = PALS.push({ n: 'シャリ', c: ['#d9d2c3', '#ffffff'] }) - 1, NETA = { salmon: PALS.push({ n: 'サーモン', c: ['#ff6a3d', '#ffd2bd'] }) - 1, tuna: PALS.push({ n: 'まぐろ', c: ['#a3122b', '#ff5a6a'] }) - 1, tamago: PALS.push({ n: '玉子', c: ['#e9a90f', '#fff09a'] }) - 1 };
+const P_SAKURA = PALS.push({ n: '桜', c: ['#ff8fb8', '#fff0f5'] }) - 1, P_SAKURA2 = PALS.push({ n: '八重桜', c: ['#e0457b', '#ffc2d6'] }) - 1, P_SENSU = PALS.push({ n: '扇', c: ['#c4161c', '#ffd36b'] }) - 1, P_RIBBON = PALS.push({ n: 'リボン', c: ['#ff3d8b', '#ffd0ea'] }) - 1;
 const FLAVORS = { vanilla: PALS.push({ n: 'バニラ', c: ['#efdfbd', '#fffaf0'] }) - 1, choco: PALS.push({ n: 'チョコ', c: ['#4a2618', '#a8714f'] }) - 1,
   strawberry: PALS.push({ n: 'いちご', c: ['#ff6f9f', '#ffd3e2'] }) - 1, matcha: PALS.push({ n: '抹茶', c: ['#4f7f2e', '#bfe08e'] }) - 1 };
 const ALLP = PALS.slice(0, 12).map((_, k) => k);
@@ -1573,7 +1638,7 @@ function posterV() {
     zoom: 1, pitch: 0.017, fov: 26, yawK: 0, yawAmp: 0, rollK: 0, yawSpd: 0, rollSpd: 0, tx: 0, ty: 0, tz: 0, fly: 0, flyD: 1, spinK: 0, spinSpd: 0,
   };
 }
-const L0 = { ox: 0, oy: 0, sc: 1, rot: 0, us: 0, k: 0, kw: 0, kp1: 0, kp2: 0, n: 0, rs: 0, rw: 0 };   // k: レイヤーごとの形（1 傘・2 足・3 輪・4 魚）
+const L0 = { ox: 0, oy: 0, sc: 1, rot: 0, us: 0, k: 0, kw: 0, kp1: 0, kp2: 0, n: 0, rs: 0, rw: 0, tp: 0, bs: 0 };   // k: レイヤーごとの形（1 傘・2 足・3 輪・4 魚）
 const POSTER_L = () => [{ a: 1, p: 0, h: 1, m: 0, ...L0 }, { a: 0, p: 1, h: 1, m: 2, ...L0 }, { a: 0, p: 3, h: 1, m: 1, ...L0 }];
 const nLayers = W => W.L.filter(L => L.a > 0.5).length;
 function fixPals(W, M) {   // 明るい背景に白・アイス、暗い背景に墨は使わない
@@ -1738,11 +1803,39 @@ const FEATURES = {
     Object.assign(v, STYLES[pick(r, ['thin', 'dot', 'bar'])]); v.width = Math.min(v.width, 0.45);
     W.L.forEach((L, j) => { L.a = j < (r() < 0.5 ? 2 : 1) ? 1 : 0; });
   }],
-  ribbon: [(W, r) => {   // ねじれたリボン
-    const v = W.v; Object.assign(v, { kap: pick(r, [0, 0, PI]), poly: 0, twist: sgn(r) * (0.8 + r() * 1.6), twSpd: sgn(r) * (0.3 + r() * 0.5), mirror: 0, dual: 0, echo: 0,
-      pitch: 0.15 + r() * 0.3, yawAmp: 0.6, yawSpd: 0.3, camLive: 0.8 });
-    W.L.forEach((L, j) => { L.a = j < (r() < 0.5 ? 2 : 1) ? 1 : 0; });
-  }],
+  ribbon: [(W, r) => {   // 新体操のリボン：長い帯が空中でらせんを描いて舞う（帯の幅が音で波打つ）
+    Object.assign(W.v, { kap: 0, poly: 0, sph: 0, mirror: 1, dual: 1, bar: 0.32, count: 160, ...STYLES.bar, width: 1, smooth: 0.5, taper: 0, base: 0.55, spine: 0, peak: 0, echo: 0, cap: 0,
+      glow: 1, stars: 1, floor: 0, refl: 0, grid: 0, scan: 0, ink: 0, hzOff: 1, zoom: 1, pitch: 0.12 + r() * 0.12, fov: 32, yawAmp: 0.35, yawSpd: 0.22, rollSpd: 0, spinSpd: 0, camLive: 0.6 });
+    W.lock = { yaw: 0, roll: 0, spin: 0, twPh: 0, coilPh: 0 };
+    W.L = [{ a: 1, p: pick(r, [P_RIBBON, 2, 3, 6]), h: 1, m: 1, ...L0, k: 11, kw: 1, kp1: r() * 6, kp2: 0, n: 170 }, { ...W.L[1], a: 0, ...L0 }, { ...W.L[2], a: 0, ...L0 }];
+    [W.bgKind, W.bg] = darkBg(r);
+  }, (W, r) => { W.L[0].kp2 = 1; W.v.pitch = 0.35 + r() * 0.2; W.v.yawAmp = 0.6; W.v.zoom = 1.05; W.lock = { roll: 0 }; }],   // 波のように大きくうねる
+  sushi: [(W, r) => {   // 寿司とバラン：つぶつぶのシャリの上にネタ、うしろにバラン
+    const neta = pick(r, ['salmon', 'tuna', 'tamago']); W.neta = neta;
+    Object.assign(W.v, { kap: 0, poly: 0, sph: 0, mirror: 1, dual: 0, bar: 0.5, count: 120, ...STYLES.bar, width: 0.85, taper: 0, base: 0.2, spine: 0, peak: 0, echo: 0, cap: 0,
+      glow: 0.6, stars: 0.5, floor: 0, refl: 0, grid: 0, scan: 0, ink: 0, hzOff: 1, layerDepth: 0, zoom: 1, pitch: 0.28 + r() * 0.1, fov: 30, yawAmp: 0.35, yawSpd: 0.2, rollSpd: 0, spinSpd: 0, camLive: 0.5 });
+    W.lock = { yaw: 0, roll: 0, spin: 0, twPh: 0, coilPh: 0 };
+    W.L = [{ a: 1, p: NETA[neta], h: 0.16, m: 1, ...L0, k: 13, kw: 1, n: 140, oy: 0.02 }, { a: 1, p: P_RICE, h: 0.22, m: 0, ...L0, k: 12, kw: 1, n: 190 },
+           { a: 1, p: P_BARAN, h: 1.5, m: 2, ...L0, tp: 1, bs: 0.3, n: 30, oy: -0.18, sc: 1.05 }];
+    W.bgKind = W8(r, { black: 1.4, night: 0.8, warm: 0.8 }); W.bg = BGK[W.bgKind](r);   // 漆の台のような暗い背景（白いシャリが見えるように）
+  }, (W, r) => { W.v.pitch = 0.55 + r() * 0.15; W.v.yawK += sgn(r) * (0.6 + r() * 0.4); W.v.zoom = 1.12; W.v.yawAmp = 0.3; W.lock = { roll: 0 }; }],   // 回りこんで、上から
+  sensu: [(W, r) => {   // 扇：とじた扇から（細い扇形）
+    Object.assign(W.v, { kap: 0.55, poly: 0, sph: 0, mirror: 1, dual: 0, bar: 0.85, count: 64, ...STYLES.bar, width: 0.8, taper: 0, base: 0.75, spine: 1, peak: 0, echo: 0, cap: 0,
+      glow: 0.7, stars: 0.6, floor: 0, refl: 0, grid: 0, scan: 0, ink: 0, hzOff: 1, zoom: 1, pitch: 0.05, fov: 30, yawAmp: 0.25, yawSpd: 0.2, rollSpd: 0, spinSpd: 0, camLive: 0.5 });
+    W.lock = { roll: 0, spin: 0, twPh: 0, coilPh: 0 };
+    W.L = [{ a: 1, p: P_SENSU, h: 2, m: 0, ...L0, oy: -0.3 }, { ...W.L[1], a: 0, ...L0 }, { ...W.L[2], a: 0, ...L0 }];
+    W.bgKind = W8(r, { paper: 1.2, black: 1, night: 1, warm: 0.8 }); W.bg = BGK[W.bgKind](r);
+  }, (W, r) => { W.v.kap = 1.25 + r() * 0.2; W.v.zoom = 1.04; W.v.yawAmp = 0.3; W.v.rollK = 0; W.lock = { roll: 0, spin: 0 }; }],   // ぱっと開く
+  sakura: [(W, r) => {   // 桜：5まいの花びらの花。いくつか、ゆっくり回る
+    const rs = sgn(r) * (0.15 + r() * 0.1);
+    Object.assign(W.v, { kap: 0, poly: 0, sph: 0, mirror: 1, dual: 0, bar: 0.4, count: 110, ...STYLES[pick(r, ['bar', 'round', 'thin'])], taper: 0.6, base: 0.2, spine: 1, peak: 0, echo: 0, cap: 0,
+      glow: 1, stars: 1, floor: 0, refl: 0, grid: 0, scan: 0, ink: 0, hzOff: 1, zoom: 1, pitch: 0.06, fov: 30, yawAmp: 0.3, yawSpd: 0.2, rollSpd: 0, spinSpd: 0, camLive: 0.5 });
+    W.lock = { roll: 0, spin: 0, twPh: 0, coilPh: 0 };
+    W.L = [{ a: 1, p: P_SAKURA, h: 0.9, m: 0, ...L0, k: 14, kw: 1, kp2: 0.55, n: 150, rs, rw: 1, ox: -0.12, oy: 0.05 },
+           { a: 1, p: P_SAKURA, h: 0.7, m: 2, ...L0, k: 14, kw: 1, kp2: 0.32, n: 110, rs: -rs * 1.3, rw: 1, ox: 0.62, oy: -0.28, rot: 0.5 },
+           { a: 1, p: P_SAKURA2, h: 0.6, m: 1, ...L0, k: 14, kw: 1, kp2: 0.24, n: 90, rs: rs * 1.6, rw: 1, ox: -0.7, oy: -0.36, rot: 1.1 }];
+    [W.bgKind, W.bg] = darkBg(r);
+  }, (W, r) => { W.v.pitch = 0.3; W.v.yawAmp = 0.55; W.v.zoom = 1.06; W.L.forEach(L => { L.oy += 0.12; }); W.lock = { roll: 0 }; }],
   baran: [(W, r) => {   // バラン（お寿司の仕切りの葉）：とがった棒がすきまなく並ぶ。前と奥に2枚
     Object.assign(W.v, { kap: 0, poly: 0, sph: 0, mirror: r() < 0.5 ? 1 : 0, dual: 0, bar: 0.75 + r() * 0.2, count: 26 + Math.floor(r() * 14), ...STYLES.bar, width: 1, taper: 1, base: 0.3,
       spine: 0, peak: 0, echo: 0, cap: 0, glow: 0, stars: 0, floor: 0, refl: 0, grid: 0, scan: 0, ink: 0, hzOff: 1, layerDepth: 0.2,
@@ -1808,7 +1901,18 @@ const FEATURES = {
 };
 // 魚の派生（それぞれ20%）：1小節目はふつうの魚、そのあと発達する
 FEATURES.sailfish = [(W, r) => { FEATURES.fish[0](W, r); W.L[0].kp2 = 1; }, (W, r) => { FEATURES.fish[1](W, r); W.L[0].kp1 = 1; W.L[0].p = P_SAIL; W.v.zoom = 0.95; }];
-FEATURES.oarfish = [(W, r) => { FEATURES.fish[0](W, r); W.L[0].kp2 = 2; }, (W, r) => { FEATURES.fish[1](W, r); W.L[0].kp1 = 1; W.L[0].p = P_OAR; W.L[0].h = 1.15; W.v.yawAmp = 0.2; }];
+FEATURES.oarfish = [(W, r) => { FEATURES.fish[0](W, r); W.L[0].kp2 = 2; }, (W, r) => { FEATURES.fish[1](W, r); W.L[0].kp1 = 1; W.L[0].p = P_OAR; W.L[0].h = 1.15; W.L[0].bs = 0.3; W.v.yawAmp = 0.2; }];   // とさかは音が小さくても長く
+// 合体：分裂した並びのまま、つぎの形になる（ソフトクリームは1つずつフレーバーがちがう）
+const FORCE_JACK = new URLSearchParams(location.search).get('jack') || '';   // 確認用
+const JACK = {
+  cream: Object.assign((W, r) => { FEATURES.tornado[0](W, r); FEATURES.tornado[1](W, r);
+    const rs = W.L[0].rs; W.L[1] = { ...W.L[2], kp1: PI, p: FLAVORS.choco }; W.L[2].p = FLAVORS.vanilla; W.L[0].rs = rs; W.flavor = 'all'; }, { feature: 'tornado', step: 1 }),
+  fish: Object.assign((W, r) => { FEATURES.fish[0](W, r); W.v.yawAmp = 0.4; }, { feature: 'fish', step: 0 }),
+  hanabi: Object.assign((W, r) => FEATURES.hanabi[0](W, r), { feature: 'hanabi', step: 0 }),
+  kurage: Object.assign((W, r) => FEATURES.kurage[0](W, r), { feature: 'kurage', step: 0 }),
+  crown: Object.assign((W, r) => FEATURES.crown[0](W, r), { feature: 'crown', step: 0 }),
+};
+const FLAVOR_KEYS = ['vanilla', 'choco', 'strawberry', 'matcha', 'mix'];
 const RARE = ['telescope', 'sailfish', 'oarfish'];   // 別のグラフィックの中で、ときどき出る
 const FEATURE_KEYS = Object.keys(FEATURES).filter(k => !RARE.includes(k));
 // 出る順番：全部を1回ずつシャッフルした並びをつなげる（同じものが続かないように）
@@ -1859,17 +1963,38 @@ const MOTIFS = {
   umihebi: { n: 'うみへび座', dual: 1, pts: [[0.02, 0], [0.06, 0.1], [0.1, 0.3], [0.17, 0.1], [0.24, 0.3], [0.31, 0.1], [0.38, 0.3], [0.45, 0.1], [0.52, 0.3], [0.59, 0.1], [0.66, 0.3], [0.73, 0.1], [0.82, 0.32], [0.87, 0.55], [0.92, 0.5], [0.95, 0]],
              stars: [[0.06, 0], [0.17, 1], [0.31, -1], [0.45, 1], [0.59, -1], [0.73, 1], [0.87, 1], [0.94, 0]], edges: [[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6], [6, 7]] },
 };
+for (const id in MOTIFS) Object.assign(MOTIFS[id], { song: 'hoshi', zk: 'cons:' + id });
+// 和の形（3曲目）：星は、シルエットのふちに自動で並べる
+const WA = {
+  wa_fuji:  { n: '富士', dual: 0, pts: [[0.05, 0], [0.2, 0.18], [0.32, 0.42], [0.42, 0.78], [0.46, 0.92], [0.54, 0.92], [0.58, 0.78], [0.68, 0.42], [0.8, 0.18], [0.95, 0]] },
+  sensu:    { n: '扇', dual: 0, pts: Array.from({ length: 21 }, (_, i) => [0.1 + 0.8 * i / 20, Math.sqrt(Math.max(0, 1 - (i / 10 - 1) ** 2))]) },
+  nami:     { n: '波', dual: 0, pts: [[0.05, 0], [0.15, 0.15], [0.22, 0.32], [0.25, 0.28], [0.3, 0.12], [0.38, 0.3], [0.47, 0.6], [0.5, 0.55], [0.56, 0.2], [0.64, 0.4], [0.76, 0.85], [0.8, 0.95], [0.83, 0.75], [0.9, 0.25], [0.95, 0]] },
+  sushi:    { n: '寿司', dual: 0, pts: [[0.12, 0], [0.16, 0.35], [0.22, 0.55], [0.3, 0.62], [0.5, 0.66], [0.7, 0.64], [0.78, 0.6], [0.84, 0.5], [0.9, 0.38], [0.93, 0]] },
+  matsu:    { n: '松', dual: 0, pts: [[0.1, 0], [0.2, 0.25], [0.25, 0.2], [0.32, 0.5], [0.37, 0.42], [0.44, 0.78], [0.5, 0.92], [0.56, 0.78], [0.63, 0.42], [0.68, 0.5], [0.75, 0.2], [0.8, 0.25], [0.9, 0]] },
+  hanabira: { n: '桜の花びら', dual: 0, pts: [[0.1, 0], [0.2, 0.3], [0.3, 0.6], [0.4, 0.85], [0.46, 0.92], [0.5, 0.78], [0.54, 0.92], [0.6, 0.85], [0.7, 0.6], [0.8, 0.3], [0.9, 0]] },
+  hyotan:   { n: 'ひょうたん', dual: 1, pts: [[0.06, 0], [0.08, 0.08], [0.12, 0.1], [0.16, 0.35], [0.26, 0.48], [0.36, 0.35], [0.42, 0.25], [0.48, 0.45], [0.62, 0.75], [0.76, 0.72], [0.86, 0.45], [0.92, 0]] },
+  dango:    { n: 'だんご', dual: 1, pts: [[0.02, 0], [0.04, 0.05], [0.14, 0.05], [0.16, 0.5], [0.2, 0.75], [0.26, 0.82], [0.32, 0.75], [0.37, 0.55], [0.4, 0.6], [0.45, 0.78], [0.51, 0.85], [0.57, 0.78],
+                                          [0.62, 0.55], [0.65, 0.6], [0.7, 0.78], [0.76, 0.85], [0.82, 0.78], [0.86, 0.5], [0.88, 0.05], [0.95, 0.05], [0.97, 0]] },
+};
+for (const id in WA) {
+  const M = WA[id], u0 = M.pts[0][0] + 0.02, u1 = M.pts[M.pts.length - 1][0] - 0.02, n = 9, top = Array.from({ length: n }, (_, k) => [u0 + (u1 - u0) * k / (n - 1), 1]);
+  M.stars = M.dual > 0.5 ? [...top, ...top.slice(1, -1).reverse().map(([u]) => [u, -1])] : [[u0, 0], ...top.slice(1, -1), [u1, 0]];
+  M.edges = M.stars.map((_, k) => [k, (k + 1) % M.stars.length]); if (M.dual <= 0.5) M.edges.pop();
+  MOTIFS[id] = Object.assign(M, { song: 'wa', zk: 'wa:' + id.replace('wa_', '') });
+}
 for (const id in MOTIFS) {   // 形 → 鳴らす音の大きさ（山並みにする変換を逆算）→ 画面に出る形（星の高さに使う）
   const M = MOTIFS[id], xs = M.pts.map(p => p[0]), ys = M.pts.map(p => p[1]);
   const h = KF.map((_, k) => { const u = (k + 0.5) / K; if (u <= xs[0] || u >= xs[xs.length - 1]) return 0; let j = 1; while (xs[j] < u) j++; return ys[j - 1] + (ys[j] - ys[j - 1]) * (u - xs[j - 1]) / (xs[j] - xs[j - 1]); });
   M.db = h.map((v, k) => RANGE * Math.pow(Math.max(v, 1e-4), 1 / CURVE) - RANGE - SLOPE * Math.log2(KF[k] / 1000));
   M.disp = toMountain(M.db);
 }
-const CONS_KEYS = Object.keys(MOTIFS);
-const CONS_SEQ = (() => { const r = mulberry(SEED * 17 + 3), seq = []; for (let k = 0; k < 40; k++) { const p = shuffle(CONS_KEYS.slice(), r); if (seq.length && p[0] === seq[seq.length - 1]) p.push(p.shift()); seq.push(...p); } return seq; })();
+const MOTIF_SEQ = {};
 const FORCE_CONS = (new URLSearchParams(location.search).get('cons') || '').split(',').filter(k => MOTIFS[k]);   // 確認用
 function motifsOf(loop) {   // その周の「形の音」：曲の中の時刻と形
-  return Object.entries(SG.scenes).map(([b, mb], k) => ({ bar: +b, t: T(mb, 3) + 0.07, id: SG.key === 'fuji' ? 'fuji' : FORCE_CONS.length ? FORCE_CONS[(loop * 3 + k) % FORCE_CONS.length] : CONS_SEQ[(loop * 3 + k) % CONS_SEQ.length] }));
+  const keys = Object.keys(MOTIFS).filter(k => MOTIFS[k].song === SG.key);
+  const seq = MOTIF_SEQ[SG.key] || (MOTIF_SEQ[SG.key] = (() => { const r = mulberry(SEED * 17 + 3 + SG.seqOff), q = []; for (let k = 0; k < 40; k++) { const p = shuffle(keys.slice(), r); if (q.length && p[0] === q[q.length - 1]) p.push(p.shift()); q.push(...p); } return q; })());
+  const force = FORCE_CONS.filter(k => MOTIFS[k].song === SG.key);
+  return Object.entries(SG.scenes).map(([b, mb], k) => ({ bar: +b, t: T(mb, 3) + 0.07, id: SG.key === 'fuji' ? 'fuji' : force.length ? force[(loop * 3 + k) % force.length] : seq[(loop * 3 + k) % seq.length] }));
 }
 // ---------- 1周の目標点。[小節, パート]（曲ごと） ----------
 const WPS = new Map();
@@ -1884,7 +2009,7 @@ function spanOf(i) {
   if (mood === 'poster' || mood === 'cons') e = motifAbs(i) + 0.05;          // カメラは、形の音と同時に正面へ
   return [s, e];
 }
-const LKEYS = ['a', 'h', 'm', 'ox', 'oy', 'sc', 'rot', 'us', 'k', 'kw', 'kp1', 'kp2', 'n', 'rs', 'rw'];
+const LKEYS = ['a', 'h', 'm', 'ox', 'oy', 'sc', 'rot', 'us', 'k', 'kw', 'kp1', 'kp2', 'n', 'rs', 'rw', 'tp', 'bs'];
 function copyWP(P) { return { v: { ...P.v }, L: P.L.map(L => ({ ...L0, ...L })), bg: { ...P.bg, sky: P.bg.sky.slice(), gnd: P.bg.gnd.slice() }, bgKind: P.bgKind, lock: {}, win: {}, lockTall: null }; }
 function wp(i) {
   if (i < 0) i = 0;
@@ -1912,15 +2037,18 @@ function wp(i) {
       Object.assign(W.v, STYLES[pick(r, ['bar', 'thin', 'line', 'bar', 'dot'])]);
       const two = M.dual > 0.5;
       Object.assign(W.v, { dual: M.dual, count: pick(r, [80, 96, 110]), bar: two ? 0.62 : 0.92, cap: two ? 0 : 1, glow: 1, stars: 1, floor: two ? 0 : 1, refl: two ? 0 : 1, grid: two ? 0 : 1, hzOff: two ? 1 : 0, zoom: two ? 1.02 : 1 });
-      W.L = [{ a: 1, p: pick(r, [4, 0, 1, 3]), h: 1, m: 0, ...L0 }, { a: 0, p: 1, h: 1, m: 2, ...L0 }, { a: 0, p: 3, h: 1, m: 1, ...L0 }];
-      W.bgKind = pick(r, ['night', 'navy', 'deep', 'night']); W.bg = BGK[W.bgKind](r);
+      W.bgKind = pick(r, SG.look.bgs); W.bg = BGK[W.bgKind](r);
+      if (!bgDark(W.bg)) { W.bg.cap = SG.key === 'wa' ? '#c8952a' : '#5d6f96'; W.consCol = SG.key === 'wa' ? [0.6, 0.4, 0.08] : [0.2, 0.26, 0.42]; }   // 明るい背景：頂は金箔、線は濃く
+      const pal = W.bgKind === 'paper' && SG.key === 'wa' ? pick(r, [11, 7]) : (p => p === 'sensu' ? P_SENSU : p)(pick(r, SG.look.pals));   // 紙には墨か朱
+      W.L = [{ a: 1, p: pal, h: 1, m: 0, ...L0 }, { a: 0, p: 1, h: 1, m: 2, ...L0 }, { a: 0, p: 3, h: 1, m: 1, ...L0 }];
       stagger(W, P, ['color', 'shape', 'coil', 'twist', 'trail', 'fly', 'style', 'layers', 'fx', 'spin', 'split'], r, 0.5, 0.62);
-      const fs = (motifAbs(i) - 0.32 - s) / (e - s), fe = (motifAbs(i) + 0.02 - s) / (e - s);
+      const lead = 1.1;   // 回っているカメラは、早めに正面へ戻しはじめる（急に振り向かないように）
+      const fs = (motifAbs(i) - lead - s) / (e - s), fe = (motifAbs(i) + 0.02 - s) / (e - s);
       W.win.cam = [fs, fe]; W.win.lock = [fs, fe];
       W.lock = { yaw: 0, roll: 0, spin: 0, twPh: 0, coilPh: 0 }; W.motifT = motifAbs(i); W.scene = 'cons'; W.cons = id;
     } else if (mood === 'dropCam') {   // サビの間の小節：カメラだけ動く（特徴的なグラフィックの間はそのまま）
       W.feature = P.feature; W.fstep = P.fstep; W.flavor = P.flavor; W.lockTall = P.lockTall; W.tallSwap = P.tallSwap; W.carryOut = P.carryOut; W.carried = P.carried;
-      if (!P.feature || ['dna', 'uni', 'cylinder', 'torus', 'ribbon', 'baran', 'kurage', 'gear', 'saturn', 'infinity', 'aurora', 'crown'].includes(P.feature)) {
+      if (!P.feature || ['dna', 'uni', 'cylinder', 'torus', 'ribbon', 'baran', 'kurage', 'gear', 'saturn', 'infinity', 'aurora', 'crown', 'sakura'].includes(P.feature)) {
         const ms = ['orbit', 'roll', 'zoom', 'tilt', 'flip', 'roll'], n = 1 + (r() < 0.5 ? 1 : 0);
         shuffle(ms, r).slice(0, n).forEach(m => MOVES[m](W, r, moodOf('drop')));
       }
@@ -1940,7 +2068,18 @@ function wp(i) {
       W.v.camLive = M.camLive;
       const carry = !!(P.feature && P.carryOut);   // 分裂・背中合わせ：その並びのまま次の形へ
       if (P.feature) { clearFeature(W, carry); order.push('layers', 'shape', 'trail', 'fly', 'coil', 'twist'); }   // 特徴的なグラフィックから、ふつうの形へ
-      if (carry) { W.carried = true; W.tallSwap = P.tallSwap; W.lockTall = P.lockTall; }
+      let jack = null;
+      if (carry) {
+        W.carried = true; W.tallSwap = P.tallSwap; W.lockTall = P.lockTall;
+        // 合体：分裂したまま、特徴的なグラフィックへ（分裂が多いほど起きやすい）
+        const n = W.v.cpW > 0.5 ? W.v.cpN : 0, pj = { 2: 0.15, 4: 0.25, 8: 0.35, 16: 0.5 }[n] || 0;
+        if (n && (FORCE_JACK || r() < pj)) jack = FORCE_JACK && JACK[FORCE_JACK] ? FORCE_JACK : pick(r, Object.keys(JACK));
+      }
+      if (jack) {
+        JACK[jack](W, r); W.feature = JACK[jack].feature; W.fstep = JACK[jack].step; W.jack = jack;
+        stagger(W, P, ['color', 'shape', 'layers', 'style', 'fx', 'cam'], r, 0.5);
+      } else {
+      if (carry) {}
       else if (P.carried) {   // その次の変化で、ゆっくり1つにまとまる
         W.v.cpW = 0; W.L.forEach(l => Object.assign(l, { ox: 0, oy: 0, sc: 1, rot: 0, us: 0 })); order.push('split', 'layers');
       }
@@ -1955,6 +2094,7 @@ function wp(i) {
       if (!v.twSpd && Math.abs(v.twist) < 0.05 && W.lock.twPh === undefined) W.lock.twPh = 0;
       if (!v.coilSpd && v.coilR < 0.01 && v.radial < 0.01 && W.lock.coilPh === undefined) W.lock.coilPh = 0;
       stagger(W, P, order, r, mood === 'drop' ? 0.45 : 0.6);
+      }
     }
   }
   W.tBar = t; delete W.r; delete W.touched;
@@ -1996,7 +2136,7 @@ function blend(F, B, c) {   // F（始まりの状態）から B（目標点）�
   const xc = ex('color'), xL = ex('layers');
   const bg = { sky: [0, 1, 2].map(k => mixC3(F.bg.sky[k], T.bg.sky[k], xc)), gnd: [0, 1].map(k => mixC3(F.bg.gnd[k], T.bg.gnd[k], xc)), ink: mixC3(F.bg.ink, T.bg.ink, xc), cap: mixC3(F.bg.cap, T.bg.cap, xc) };
   const L = T.L.map((Lb, j) => { const La = F.L[j], o = { m: Lb.m, mFrom: La.m, mx: La.m === Lb.m ? 0 : xL, c0: mixC3(La.c0, Lb.c0, xc), c1: mixC3(La.c1, Lb.c1, xc) };
-    for (const k of ['a', 'h', 'ox', 'oy', 'sc', 'rot', 'us', 'rs', 'rw']) o[k] = lerp(La[k] ?? 0, Lb[k] ?? 0, xL);
+    for (const k of ['a', 'h', 'ox', 'oy', 'sc', 'rot', 'us', 'rs', 'rw', 'tp', 'bs']) o[k] = lerp(La[k] ?? 0, Lb[k] ?? 0, xL);
     // レイヤーごとの形：ちがう形どうしは、いったん基本の形をとおってから
     const ka = La.kw > 0 ? La.k || 0 : 0, kb = Lb.kw > 0 ? Lb.k || 0 : 0, wa = ka ? La.kw : 0, wb = kb ? Lb.kw : 0;
     if (ka && kb && ka !== kb) { const h = xL < 0.5; o.k = h ? ka : kb; o.kw = h ? wa * (1 - 2 * xL) : wb * (2 * xL - 1); o.kp1 = h ? La.kp1 : Lb.kp1; o.kp2 = h ? La.kp2 : Lb.kp2; }
@@ -2042,6 +2182,11 @@ function evalQ(c, dt, live) {
     const st = Math.round(Math.log2(Q.cpN || 2)), el = c - G.s - 0.25 * BEAT, k = clamp(Math.floor(el / (1.75 * BEAT)) + 1, 1, st);
     Q.cpN = 2 ** k; Q.cpPh = el < 0 ? 0 : clamp((el - (k - 1) * 1.75 * BEAT) / (1.1 * BEAT)); Q.cpW = Math.max(Q.cpW, G === B ? 1 : 0);
   } else Q.cpPh = 1;
+  { const J = B.jack ? B : tc > 0 && wp(tc - 1).jack ? wp(tc - 1) : null;   // 合体のソフトクリーム：1つずつフレーバーがちがう
+    if (J && J.jack === 'cream' && Q.cpW > 0.001 && Q.L[1] && Q.L[2]) {
+      const sp = Math.max(0.1, (B.e - B.s) * 0.6), x = J === B ? clamp((c - B.s) / sp) : 1 - clamp((c - B.s) / sp), cl = (p, L) => [mixC3(L.c0, rgb(PALS[p].c[0]), x), mixC3(L.c1, rgb(PALS[p].c[1]), x)];
+      Q.cpCols = []; for (let k = 0; k < 16; k++) { const f = FLAVOR_KEYS[k % 5]; Q.cpCols[k] = [null, cl(f === 'mix' ? FLAVORS.choco : FLAVORS[f], Q.L[1]), cl(f === 'mix' ? FLAVORS.vanilla : FLAVORS[f], Q.L[2])]; }
+    } }
   if (Q.cpW > 0.001) { Q.cpRows = []; for (let k = 1; k < 16; k++) Q.cpRows[k] = rowAt(c - k * 0.04); }   // 分裂したものは少しずつ遅れて動く（波のように）
   Q.axis = 0;
   // カメラ：いつも少し動いている（手持ちのような）＋ 拍で寄る・揺れる
@@ -2057,7 +2202,7 @@ function evalQ(c, dt, live) {
     const d = c - W.motifT; if (d < -0.02 || d > 1.2) continue;
     Q.motif = { id: W.scene === 'fuji' ? 'fuji' : W.cons, d };
     if (W.scene === 'cons') { const M = MOTIFS[W.cons], a = clamp(d / 0.08) * (d < 0.62 ? 1 : Math.max(0, 1 - (d - 0.62) / 0.45));
-      Q.cons = { id: W.cons, a, edges: M.edges, pts: M.stars.map(([u, sd]) => [u, sd, sd ? M.disp[Math.min(K - 1, Math.floor(u * K))] : 0]) }; }
+      Q.cons = { id: W.cons, a, col: W.consCol || SG.lineCol, edges: M.edges, pts: M.stars.map(([u, sd]) => [u, sd, sd ? M.disp[Math.min(K - 1, Math.floor(u * K))] : 0]) }; }
     break;
   }
   lastS = S;
@@ -2152,12 +2297,14 @@ function useSong(key) {
     W0.win = Object.fromEntries([...Object.keys(GROUPS), 'color', 'layers'].map(g => [g, [0.05, 0.95]])); W0.win.lock = [0.1, 0.9]; }
   document.body.dataset.song = key; updateSongBtn();
 }
-function updateSongBtn() { const o = SG.key === 'fuji' ? SONGS.hoshi : SONGS.fuji; $('songBtn').textContent = `♪ ${o.name}の曲へ`; }
-$('songBtn').addEventListener('click', async () => {
-  const key = SG.key === 'fuji' ? 'hoshi' : 'fuji';
-  if (!songBufs[key]) { toast('曲を読み込んでいます…'); try { await loadSong(key); } catch (e) { toast('曲を読み込めませんでした'); return; } }
+const nextSong = () => { const k = unlocked.indexOf(SG.key); return unlocked[(k + 1) % unlocked.length]; };
+function updateSongBtn() { const o = SONGS[nextSong()]; $('songBtn').textContent = `♪ ${o.name}の曲へ`; $('songBtn').hidden = unlocked.length < 2; }
+async function switchTo(key) {
+  if (key === SG.key) return;
+  if (!songBufs[key]) { try { await loadSong(key); } catch (e) { toast('曲を読み込めませんでした'); return; } }
   const was = playing; useSong(key); if (was) { startAudio(); playing = true; lastRender = 0; }
-});
+}
+$('songBtn').addEventListener('click', () => { toast('曲を読み込んでいます…'); switchTo(nextSong()); });
 
 // =====================================================
 //  毎フレーム
@@ -2211,16 +2358,30 @@ document.querySelectorAll('.songPick').forEach(b => b.addEventListener('click', 
 document.addEventListener('visibilitychange', () => { if (document.hidden && playing) { stopAudio(); playing = false; document.body.classList.add('paused'); } });
 $('resumeBtn').addEventListener('click', () => { if (viewAspect() !== curAspect) curAspect = viewAspect(); play(); });
 
-// ---------- 図鑑：欄（暗くて名前だけ）→ キャプチャーすると画像で埋まる ----------
+// ---------- 図鑑：レアリティごとの欄（暗くて名前だけ）→ キャプチャーすると画像で埋まる ----------
+const FEAT_NAMES = [['dna', 'DNA'], ['hanabi', '花火'], ['kami', '噛み合わせ'], ['uni', 'うに'], ['cylinder', '円柱のらせん'], ['tornado', '竜巻'], ['tunnel', 'トンネル'], ['terrain', '山脈'],
+  ['torus', '輪の螺旋'], ['ribbon', '新体操のリボン'], ['baran', 'バラン'], ['kurage', 'クラゲ'], ['fish', '魚'], ['gear', '歯車'], ['saturn', '土星'], ['infinity', '∞（無限）'], ['aurora', 'オーロラ'],
+  ['crown', '王冠'], ['sushi', '寿司とバラン'], ['sensu', '扇'], ['sakura', '桜']];
 const ZK_GROUPS = [
-  { n: '富士山', items: [['fuji', '富士山'], ['fuji_hidden', 'かくれた富士']] },
-  { n: '星座', items: CONS_KEYS.map(k => ['cons:' + k, MOTIFS[k].n]) },
-  { n: '特徴的なグラフィック', items: [['dna', 'DNA'], ['hanabi', '花火'], ['kami', '噛み合わせ'], ['uni', 'うに'], ['cylinder', '円柱のらせん'], ['tornado', '竜巻'], ['tunnel', 'トンネル'], ['terrain', '山脈'],
-    ['torus', '輪の螺旋'], ['ribbon', 'リボン'], ['baran', 'バラン'], ['kurage', 'クラゲ'], ['fish', '魚'], ['gear', '歯車'], ['saturn', '土星'], ['infinity', '∞（無限）'], ['aurora', 'オーロラ'], ['crown', '王冠']] },
-  { n: '派生とレア', items: [['telescope', '望遠鏡'], ['sailfish', 'バショウカジキ'], ['oarfish', 'リュウグウノツカイ'], ['uni16', 'うに16個'], ['cream_vanilla', 'ソフトクリーム（バニラ）'],
-    ['cream_choco', 'ソフトクリーム（チョコ）'], ['cream_strawberry', 'ソフトクリーム（いちご）'], ['cream_matcha', 'ソフトクリーム（抹茶）'], ['cream_mix', 'ソフトクリーム（ミックス）']] },
+  { n: '★ 基本の形', items: [['b:hz', '地平線'], ['b:arc', '弧'], ['b:circle', '円'], ['b:incircle', '内向きの円'], ['b:tri', '三角形'], ['b:sq', '四角形'], ['b:penta', '五角形'], ['b:hexa', '六角形'], ['b:octa', '八角形']] },
+  { n: '★★ 特徴的なグラフィック', items: [['fuji', '富士山'], ...FEAT_NAMES] },
+  { n: '★★★ レア', items: [['uni_split', 'うにの分裂'], ['sailfish', 'バショウカジキ'], ['oarfish', 'リュウグウノツカイ'],
+    ...FLAVOR_KEYS.map(f => ['cream_' + f, `ソフトクリーム（${{ vanilla: 'バニラ', choco: 'チョコ', strawberry: 'いちご', matcha: '抹茶', mix: 'ミックス' }[f]}）`]),
+    ...Object.values(MOTIFS).map(M => [M.zk, M.n, M.song])] },
+  { n: '★★★★ 激レア', items: [['telescope', '望遠鏡'], ['uni16', 'うに16個'], ['fuji_hidden', 'かくれた富士'], ['sea_fish', '海の魚'], ['sea_kurage', '海のクラゲ']] },
+  { n: '★★★★★ 伝説', items: [['deep_oarfish', '深海のリュウグウノツカイ'], ['jack_cream', 'ソフトクリームの山'], ['jack_fish', '魚の群れ'], ['jack_hanabi', '花火の大連発'], ['jack_kurage', 'クラゲの群れ'], ['jack_crown', '王冠のコレクション']] },
 ];
-const ZK_NAME = Object.fromEntries(ZK_GROUPS.flatMap(g => g.items)), ZK_TOTAL = Object.keys(ZK_NAME).length, OTHER_MAX = 12;
+const ZK_NAME = Object.fromEntries(ZK_GROUPS.flatMap(g => g.items.map(([id, n]) => [id, n]))), ZK_SONG = Object.fromEntries(ZK_GROUPS.flatMap(g => g.items.filter(x => x[2]).map(([id, , sg]) => [id, sg])));
+const ZK_TOTAL = Object.keys(ZK_NAME).length, OTHER_MAX = 12;
+// 曲を切りかえるきっかけ：その形をキャプチャーすると、べつの曲へ（一度ひらいた曲は、はじめの画面でも選べる）
+const TRIGGERS = { fuji: { telescope: 'hoshi', fuji_hidden: 'wa' }, hoshi: { 'cons:table': 'fuji', 'cons:uo': 'wa' }, wa: { 'wa:fuji': 'fuji', 'wa:dango': 'hoshi' } };
+let unlocked = ['fuji'];
+try { const u = JSON.parse(localStorage.getItem('asg-songs') || '[]'); if (Array.isArray(u)) unlocked = [...new Set(['fuji', ...u.filter(k => SONGS[k])])]; } catch (e) {}
+function unlockSong(key) { if (unlocked.includes(key)) return false; unlocked.push(key); try { localStorage.setItem('asg-songs', JSON.stringify(unlocked)); } catch (e) {} renderPicks(); updateSongBtn(); return true; }
+function renderPicks() {
+  document.querySelectorAll('.songPick').forEach(b => { b.hidden = !unlocked.includes(b.dataset.song); });
+  $('pickHint').textContent = unlocked.length < 3 ? `かくれた曲が、あと${3 - unlocked.length}曲あります。ある形をキャプチャーすると…` : '';
+}
 const ZK = new Map();   // id → { id, full, thumb, aspect, ink, at, song, seen }
 const urlOf = new Map();
 const thumbURL = rec => { let u = urlOf.get(rec.thumb); if (!u) { u = URL.createObjectURL(rec.thumb); urlOf.set(rec.thumb, u); } return u; };
@@ -2230,17 +2391,30 @@ const idb = () => new Promise(res => { try { const q = indexedDB.open('asg-zukan
 const tx = (mode, fn) => new Promise(res => { if (!zkDB) return res(null); try { const t = zkDB.transaction('shots', mode), st = t.objectStore('shots'), q = fn(st); t.oncomplete = () => res(q && q.result); t.onerror = () => res(null); } catch (e) { res(null); } });
 async function zkLoad() { zkDB = await idb(); const all = (await tx('readonly', st => st.getAll())) || []; for (const r of all) ZK.set(r.id, r); zkCount(); }
 function zkCount() { const n = [...ZK.keys()].filter(k => ZK_NAME[k]).length; $('zkCount').textContent = `${n}/${ZK_TOTAL}`; $('zkHead').textContent = `${n} / ${ZK_TOTAL}`; $('zkBtn').classList.toggle('hasNew', [...ZK.values()].some(r => !r.seen)); }
-// いま画面にあるのは何の形か
-function subjectAt(c, Q) {
-  if (Q.motif) { const { id, d } = Q.motif; if (id === 'fuji') { if (d >= -0.02 && d < 0.45) return 'fuji_hidden'; } else if (d >= -0.02 && d < 1.0) return 'cons:' + id; }
+// いま画面にあるのは何の形か（いくつも写っていれば、全部）
+function subjectsAt(c, Q) {
+  const out = new Set(), add = id => { if (id && ZK_NAME[id]) out.add(id); };
+  if (Q.motif) { const { id, d } = Q.motif; if (id === 'fuji') { if (d >= -0.02 && d < 0.45) add('fuji_hidden'); } else if (d >= -0.02 && d < 1.0) add(MOTIFS[id].zk); }
   const B = wp(tc), A = tc > 0 ? wp(tc - 1) : null, x = clamp((c - B.s) / Math.max(1e-3, B.e - B.s)), W = x >= 0.5 || !A ? B : A;
-  if (W.scene === 'fuji' && (W !== B || x > 0.6)) return 'fuji';
-  const f = W.feature; if (!f) return null;
-  if (f === 'tornado' && W.fstep === 1) return 'cream_' + W.flavor;
-  if (f === 'telescope') return W.fstep === 1 ? 'telescope' : 'cylinder';
-  if (f === 'sailfish' || f === 'oarfish') return W.fstep === 1 ? f : 'fish';
-  if (f === 'uni' && (Q.cpW || 0) > 0.5 && Q.cpN >= 16 && (Q.cpPh ?? 1) > 0.5) return 'uni16';
-  return ZK_NAME[f] ? f : null;
+  if (W.scene === 'fuji' && (W !== B || x > 0.6)) add('fuji');
+  const f = W.feature, cpOn = (Q.cpW || 0) > 0.5 && (Q.cpPh ?? 1) > 0.5;
+  if (f) {
+    if (W.jack) { add('jack_' + W.jack); if (W.jack === 'cream') { for (let k = 0; k < Math.min(5, Q.cpN || 1); k++) add('cream_' + FLAVOR_KEYS[k]); } else add(f); }
+    else if (f === 'tornado' && W.fstep === 1) add('cream_' + W.flavor);
+    else if (f === 'telescope') add(W.fstep === 1 ? 'telescope' : 'cylinder');
+    else if (f === 'sailfish' || f === 'oarfish') add(W.fstep === 1 ? f : 'fish');
+    else if (f === 'uni') { add('uni'); if (cpOn) add(Q.cpN >= 16 ? 'uni16' : 'uni_split'); }
+    else add(f);
+    if (W.bgKind === 'sea') {   // 海の背景のときだけの激レア
+      if (['fish', 'sailfish', 'oarfish'].includes(f) || W.jack === 'fish') add('sea_fish');
+      if (f === 'kurage' || W.jack === 'kurage') add('sea_kurage');
+      if (f === 'oarfish' && W.fstep === 1) add('deep_oarfish');
+    }
+  } else if (!W.scene && Q.sph < 0.3 && Q.coilR < 0.15 && Q.radial < 0.2 && Math.abs(Q.twist || 0) < 0.4 && (Q.trail || 0) < 0.35 && (Q.fly || 0) < 0.3) {   // 基本の形
+    const k = Math.abs(Q.kap);
+    add(k < 0.35 ? 'b:hz' : k < 2.5 ? 'b:arc' : Q.poly > 0.6 ? { 3: 'b:tri', 4: 'b:sq', 5: 'b:penta', 6: 'b:hexa', 8: 'b:octa' }[Math.round(Q.sides)] : Q.kap < 0 ? 'b:incircle' : 'b:circle');
+  }
+  return [...out];
 }
 const toBlob = (c, type, q) => new Promise((res, rej) => c.toBlob(b => b ? res(b) : rej(new Error('img')), type, q));
 function scaled(src, long) { const k = Math.min(1, long / Math.max(src.width, src.height)), c = document.createElement('canvas'); c.width = Math.round(src.width * k); c.height = Math.round(src.height * k);
@@ -2249,7 +2423,7 @@ let capBusy = false;
 async function capture() {
   if (!playing || !lastQ || !E || capBusy) return;
   capBusy = true;
-  const Q = lastQ, aspect = curAspect, A = ASPECTS[aspect], sid = subjectAt(clockNow(), Q);
+  const Q = lastQ, aspect = curAspect, A = ASPECTS[aspect], sids = subjectsAt(clockNow(), Q);
   $('frame').classList.remove('shutter'); void $('frame').offsetWidth; $('frame').classList.add('shutter');
   try {
     let c = null;
@@ -2258,17 +2432,26 @@ async function capture() {
     const tc2 = scaled(c, 420);
     flyToZukan(tc2.toDataURL('image/jpeg', 0.8));
     const [full, thumb] = await Promise.all([toBlob(c, 'image/jpeg', 0.92), toBlob(tc2, 'image/jpeg', 0.84)]);
-    const id = sid || 'other:' + Date.now(), had = ZK.has(id);
-    const rec = { id, full, thumb, aspect, ink: toHex(Q.bgc.ink.map(v => v * 255)), at: Date.now(), song: SG.key, seen: false };
-    const old = ZK.get(id); if (old && urlOf.has(old.thumb)) { URL.revokeObjectURL(urlOf.get(old.thumb)); urlOf.delete(old.thumb); }
-    ZK.set(id, rec); await tx('readwrite', st => st.put(rec));
-    if (!sid) {   // 「その他」は新しい12枚まで
+    const ids = sids.length ? sids : ['other:' + Date.now()], fresh = ids.filter(id => ZK_NAME[id] && !ZK.has(id)), at = Date.now();
+    for (const id of ids) {
+      const rec = { id, full, thumb, aspect, ink: toHex(Q.bgc.ink.map(v => v * 255)), at, song: SG.key, seen: false };
+      const old = ZK.get(id); if (old && urlOf.has(old.thumb)) { URL.revokeObjectURL(urlOf.get(old.thumb)); urlOf.delete(old.thumb); }
+      ZK.set(id, rec); await tx('readwrite', st => st.put(rec));
+    }
+    if (!sids.length) {   // 「その他」は新しい12枚まで
       const others = [...ZK.values()].filter(r => !ZK_NAME[r.id]).sort((a, b) => b.at - a.at);
       for (const r of others.slice(OTHER_MAX)) { ZK.delete(r.id); await tx('readwrite', st => st.delete(r.id)); }
     }
+    const to = sids.map(id => (TRIGGERS[SG.key] || {})[id]).find(Boolean);
     setTimeout(() => { zkCount(); $('zkBtn').classList.remove('bump'); void $('zkBtn').offsetWidth; $('zkBtn').classList.add('bump');
-      toast(!sid ? '「その他」に入りました' : had ? `「${ZK_NAME[id]}」の写真を新しくしました` : `図鑑に「${ZK_NAME[id]}」が入りました！`);
-      if ($('zukan').classList.contains('show')) renderZukan(); }, 560);
+      toast(!sids.length ? '「その他」に入りました' : fresh.length > 1 ? `図鑑に${fresh.length}種類が入りました！（${fresh.map(id => ZK_NAME[id]).slice(0, 3).join('・')}${fresh.length > 3 ? '…' : ''}）`
+        : fresh.length ? `図鑑に「${ZK_NAME[fresh[0]]}」が入りました！` : `「${ZK_NAME[sids[0]]}」の写真を新しくしました`);
+      if ($('zukan').classList.contains('show')) renderZukan();
+      if (to) {   // きっかけの形：べつの曲へ
+        const first = unlockSong(to);
+        setTimeout(() => { toast(first ? `♪ かくれた曲「${SONGS[to].name}」がひらきました` : `♪「${SONGS[to].name}」の曲へ`); switchTo(to); }, 1400);
+      }
+    }, 560);
   } catch (e) { toast('キャプチャーできませんでした。もう一度お試しください'); }
   capBusy = false;
 }
@@ -2293,6 +2476,7 @@ function renderZukan() {
   const box = $('zkGrid'); box.innerHTML = '';
   const tileOf = (id, name) => {
     const rec = ZK.get(id), b = document.createElement('button'); b.className = 'zt' + (rec ? ' got' : '') + (rec && !rec.seen ? ' new' : '');
+    if (!rec && ZK_SONG[id] && !unlocked.includes(ZK_SONG[id])) { name = '？？？'; b.classList.add('locked'); }   // まだひらいていない曲の形
     if (rec) { const im = document.createElement('img'); im.src = thumbURL(rec); im.alt = name; b.appendChild(im); b.addEventListener('click', () => openShot(id)); }
     else b.disabled = true;
     const t = document.createElement('span'); t.textContent = name; b.appendChild(t); return b;
@@ -2457,11 +2641,13 @@ function toast(t) { const el = $('toast'); el.textContent = t; el.classList.add(
 // ---------- 起動 ----------
 initAudio();
 if (!E) { $('loadMsg').innerHTML = 'このブラウザでは表示できません（WebGL2が必要です）。<br>新しいブラウザでお試しください'; $('loadMsg').classList.add('err'); }
-for (const key of ['fuji', 'hoshi']) {   // 2曲とも読み込んでおく（読み込めた曲から選べる）
+for (const key of Object.keys(SONGS)) {   // ひらいている曲を読み込む（ほかは、ひらいたときに）
+  if (!unlocked.includes(key)) continue;
   const b = document.querySelector(`.songPick[data-song="${key}"]`);
   loadSong(key).then(() => { if (E) b.disabled = false; if (key === 'fuji') $('loadMsg').textContent = ''; })
     .catch(() => { if (key === 'fuji') { $('loadMsg').textContent = '曲を読み込めませんでした。電波のよいところでページを読み込みなおしてください'; $('loadMsg').classList.add('err'); } });
 }
+renderPicks(); updateSongBtn();
 loadSettings();
 zkLoad();
 fit();
@@ -2469,10 +2655,10 @@ requestAnimationFrame(frame);
 
 // テスト用
 window.__asg = {
-  get SONG() { return SG; }, get PLAN() { return PLAN; }, MOODS, MOTIFS, CONS_SEQ, motifsOf, useSong, songBufs, wp, evalQ, FUJI, CFG, STYLES,
+  get SONG() { return SG; }, get PLAN() { return PLAN; }, MOODS, MOTIFS, motifsOf, unlockSong, unlocked: () => unlocked, switchTo, subjectsAt: () => subjectsAt(clockNow(), lastQ), JACK, useSong, songBufs, wp, evalQ, FUJI, CFG, STYLES,
   state: () => ({ playing, stopped, clock: clockNow(), zk: ZK.size, tc, aspect: curAspect, capLevel, scaleLv, gapEma, jsEma, ctx: actx && actx.state, cw: cv.width, ch: cv.height }),
   curves: () => ({ disp: Array.from(dispC), db: liveDb.slice() }),
-  capture, subjectAt: () => subjectAt(clockNow(), lastQ), zk: () => [...ZK.keys()], openZukan, openShot, lastQ: () => lastQ,
+  capture, zk: () => [...ZK.keys()], openZukan, openShot, lastQ: () => lastQ,
   seekAbs(sec) { this.seek(sec - Math.floor(clockNow() / DUR) * DUR); },
   seek(sec) { const was = playing; if (was) stopAudio(); playing = false; clockBase = Math.floor(clockBase / DUR) * DUR + sec; resetDirector(); tc = 0; while (clockBase >= wp(tc + 1).s) tc++; if (was) { startAudio(); playing = true; } },
   jumpTo, featurePlan, FEATURE_SEQ,
