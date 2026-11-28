@@ -2338,7 +2338,7 @@ const ZK_GROUPS = [
   { n: '★★★ レア', items: [['uni_split', 'うにの分裂'], ['sailfish', 'バショウカジキ'], ['oarfish', 'リュウグウノツカイ'],
     ...FLAVOR_KEYS.map(f => ['cream_' + f, `ソフトクリーム（${{ vanilla: 'バニラ', choco: 'チョコ', strawberry: 'いちご', matcha: '抹茶', mix: 'ミックス' }[f]}）`]),
     ...Object.values(MOTIFS).map(M => [M.zk, M.n])] },
-  { n: '★★★★ 激レア', items: [['telescope', '望遠鏡'], ['uni16', 'うに16個'], ['fuji_hidden', 'かくれた富士'], ['sea_fish', '海の魚'], ['sea_kurage', '海のクラゲ']] },
+  { n: '★★★★ 激レア', items: [['telescope', '望遠鏡'], ['uni16', 'うに16個'], ['fuji_hidden', 'かくれた富士'], ['sea_kurage', '海のクラゲ']] },
 ];
 const ZK_NAME = Object.fromEntries(ZK_GROUPS.flatMap(g => g.items.map(([id, n]) => [id, n])));
 const ZK_TOTAL = Object.keys(ZK_NAME).length, OTHER_MAX = 12;
@@ -2366,7 +2366,6 @@ function subjectsAt(c, Q) {
     else if (f === 'uni') { add('uni'); if (cpOn) add(Q.cpN >= 16 ? 'uni16' : 'uni_split'); }
     else add(f);
     if (W.bgKind === 'sea') {   // 海の背景のときだけの激レア
-      if (['fish', 'sailfish', 'oarfish'].includes(f) || W.jack === 'fish') add('sea_fish');
       if (f === 'kurage' || W.jack === 'kurage') add('sea_kurage');
     }
   } else if (!W.scene && Q.sph < 0.3 && Q.coilR < 0.15 && Q.radial < 0.2 && Math.abs(Q.twist || 0) < 0.4 && (Q.trail || 0) < 0.35 && (Q.fly || 0) < 0.3) {   // 基本の形
