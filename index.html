@@ -1390,8 +1390,8 @@ const SONGS = {
     } },
 };
 let SG = SONGS.fuji, BEAT = 0, BAR = 0, DUR = 0, PLAN = SG.PLAN, T = null;
-// 曲を切りかえるきっかけ：その形をキャプチャーすると、べつの曲へ（次の小節の頭で、同じ位置へ）
-const TRIGGERS = { fuji: { telescope: 'hoshi', fuji_hidden: 'wa' }, hoshi: { 'cons:table': 'fuji', 'cons:uo': 'wa' }, wa: { 'wa:fuji': 'fuji', 'wa:dango': 'hoshi' } };
+// 曲を切りかえるきっかけ：その形をキャプチャーすると、次の曲へ（次の小節の頭で、同じ位置へ）
+const TRIGGERS = { fuji: { fuji_hidden: 'wa' }, wa: { 'wa:kamon': 'hoshi' }, hoshi: { 'cons:sankaku': 'fuji' } };   // 一方通行：富士山 → 和 → 星座 → 富士山
 function setSongVars(key) { SG = SONGS[key]; BEAT = 60 / SG.BPM; BAR = BEAT * 4; DUR = BAR * SG.BARS; PLAN = SG.PLAN; T = (bar, beat = 0) => (bar * 4 + beat) * BEAT; }
 setSongVars('fuji');
 const pmod = i => ((i % PLAN.length) + PLAN.length) % PLAN.length;
@@ -1923,41 +1923,17 @@ function simplify(W) {
 
 // ---------- 星座：1曲目に出てくる形からなれそうな星座を、スペクトラムの形にした音（富士山と同じように無理やりつくる） ----------
 // pts：形（低い音 u=0 → 高い音 u=1 の高さ）、dual：下側にものびる（上下対称の形）、stars：星の位置 [u, 上1/下-1/線上0]、edges：星をつなぐ線
-const MOTIFS = {
-  uo:      { n: 'うお座', dual: 1, pts: [[0.02, 0], [0.07, 0.78], [0.11, 0.62], [0.18, 0.18], [0.24, 0.42], [0.36, 0.78], [0.5, 0.95], [0.62, 0.86], [0.75, 0.58], [0.86, 0.25], [0.93, 0.04], [0.95, 0]],
-             stars: [[0.07, 1], [0.18, 0], [0.5, 1], [0.93, 0], [0.5, -1], [0.07, -1]], edges: [[0, 1], [1, 5], [5, 0], [1, 2], [2, 3], [3, 4], [4, 1]] },
-  kajiki:  { n: 'かじき座', dual: 0.45, pts: [[0.02, 0], [0.06, 0.62], [0.1, 0.3], [0.16, 0.24], [0.24, 0.32], [0.3, 0.62], [0.38, 0.95], [0.46, 0.98], [0.54, 0.86], [0.6, 0.5], [0.66, 0.36], [0.72, 0.2], [0.8, 0.1], [0.92, 0.06], [0.96, 0]],
-             stars: [[0.06, 1], [0.06, -1], [0.16, 0], [0.36, 1], [0.5, 1], [0.64, 1], [0.95, 0], [0.42, -1]], edges: [[0, 2], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6], [6, 7], [7, 2]] },
-  kanmuri: { n: 'かんむり座', dual: 0, pts: [[0.08, 0], [0.12, 0.4], [0.2, 0.72], [0.27, 0.42], [0.35, 0.88], [0.42, 0.45], [0.5, 1.0], [0.58, 0.45], [0.65, 0.88], [0.73, 0.42], [0.8, 0.72], [0.88, 0.4], [0.92, 0]],
-             stars: [[0.12, 1], [0.2, 1], [0.35, 1], [0.5, 1], [0.65, 1], [0.8, 1], [0.88, 1]], edges: [[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6]] },
+const MOTIFS = {   // いまは、曲を切りかえるきっかけの形だけ
   sankaku: { n: 'さんかく座', dual: 0, pts: [[0.08, 0], [0.5, 1], [0.92, 0]], stars: [[0.12, 0], [0.5, 1], [0.88, 0]], edges: [[0, 1], [1, 2], [2, 0]] },
-  boenkyo: { n: 'ぼうえんきょう座', dual: 1, pts: [[0.04, 0], [0.08, 0.16], [0.16, 0.16], [0.2, 0.26], [0.62, 0.5], [0.66, 0.62], [0.8, 0.66], [0.84, 0.5], [0.88, 0]],
-             stars: [[0.06, 0], [0.2, 1], [0.64, 1], [0.84, 1], [0.84, -1], [0.64, -1], [0.2, -1]], edges: [[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6], [6, 0]] },
-  table:   { n: 'テーブルさん座', dual: 0, pts: [[0.06, 0], [0.14, 0.12], [0.3, 0.82], [0.34, 0.86], [0.66, 0.86], [0.7, 0.82], [0.86, 0.12], [0.94, 0]],
-             stars: [[0.08, 0], [0.31, 1], [0.5, 1], [0.69, 1], [0.92, 0]], edges: [[0, 1], [1, 2], [2, 3], [3, 4]] },
-  tobiuo:  { n: 'とびうお座', dual: 1, pts: [[0.02, 0], [0.06, 0.6], [0.1, 0.46], [0.16, 0.16], [0.24, 0.3], [0.32, 0.55], [0.42, 1.0], [0.5, 0.7], [0.58, 0.42], [0.7, 0.36], [0.82, 0.24], [0.92, 0.04], [0.94, 0]],
-             stars: [[0.06, 1], [0.06, -1], [0.16, 0], [0.42, 1], [0.42, -1], [0.93, 0]], edges: [[0, 2], [1, 2], [2, 3], [3, 5], [5, 4], [4, 2]] },
-  umihebi: { n: 'うみへび座', dual: 1, pts: [[0.02, 0], [0.06, 0.1], [0.1, 0.3], [0.17, 0.1], [0.24, 0.3], [0.31, 0.1], [0.38, 0.3], [0.45, 0.1], [0.52, 0.3], [0.59, 0.1], [0.66, 0.3], [0.73, 0.1], [0.82, 0.32], [0.87, 0.55], [0.92, 0.5], [0.95, 0]],
-             stars: [[0.06, 0], [0.17, 1], [0.31, -1], [0.45, 1], [0.59, -1], [0.73, 1], [0.87, 1], [0.94, 0]], edges: [[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6], [6, 7]] },
 };
 for (const id in MOTIFS) Object.assign(MOTIFS[id], { song: 'hoshi', zk: 'cons:' + id });
-// 和の形（3曲目）：星は、シルエットのふちに自動で並べる
-const WA = {
-  wa_fuji:  { n: '富士', dual: 0, pts: [[0.05, 0], [0.2, 0.18], [0.32, 0.42], [0.42, 0.78], [0.46, 0.92], [0.54, 0.92], [0.58, 0.78], [0.68, 0.42], [0.8, 0.18], [0.95, 0]] },
-  sensu:    { n: '扇', dual: 0, pts: Array.from({ length: 21 }, (_, i) => [0.1 + 0.8 * i / 20, Math.sqrt(Math.max(0, 1 - (i / 10 - 1) ** 2))]) },
-  nami:     { n: '波', dual: 0, pts: [[0.05, 0], [0.15, 0.15], [0.22, 0.32], [0.25, 0.28], [0.3, 0.12], [0.38, 0.3], [0.47, 0.6], [0.5, 0.55], [0.56, 0.2], [0.64, 0.4], [0.76, 0.85], [0.8, 0.95], [0.83, 0.75], [0.9, 0.25], [0.95, 0]] },
-  sushi:    { n: '寿司', dual: 0, pts: [[0.12, 0], [0.16, 0.35], [0.22, 0.55], [0.3, 0.62], [0.5, 0.66], [0.7, 0.64], [0.78, 0.6], [0.84, 0.5], [0.9, 0.38], [0.93, 0]] },
-  matsu:    { n: '松', dual: 0, pts: [[0.1, 0], [0.2, 0.25], [0.25, 0.2], [0.32, 0.5], [0.37, 0.42], [0.44, 0.78], [0.5, 0.92], [0.56, 0.78], [0.63, 0.42], [0.68, 0.5], [0.75, 0.2], [0.8, 0.25], [0.9, 0]] },
-  hanabira: { n: '桜の花びら', dual: 0, pts: [[0.1, 0], [0.2, 0.3], [0.3, 0.6], [0.4, 0.85], [0.46, 0.92], [0.5, 0.78], [0.54, 0.92], [0.6, 0.85], [0.7, 0.6], [0.8, 0.3], [0.9, 0]] },
-  hyotan:   { n: 'ひょうたん', dual: 1, pts: [[0.06, 0], [0.08, 0.08], [0.12, 0.1], [0.16, 0.35], [0.26, 0.48], [0.36, 0.35], [0.42, 0.25], [0.48, 0.45], [0.62, 0.75], [0.76, 0.72], [0.86, 0.45], [0.92, 0]] },
-  dango:    { n: 'だんご', dual: 1, pts: [[0.02, 0], [0.04, 0.05], [0.14, 0.05], [0.16, 0.5], [0.2, 0.75], [0.26, 0.82], [0.32, 0.75], [0.37, 0.55], [0.4, 0.6], [0.45, 0.78], [0.51, 0.85], [0.57, 0.78],
-                                          [0.62, 0.55], [0.65, 0.6], [0.7, 0.78], [0.76, 0.85], [0.82, 0.78], [0.86, 0.5], [0.88, 0.05], [0.95, 0.05], [0.97, 0]] },
-};
-for (const id in WA) {
-  const M = WA[id], u0 = M.pts[0][0] + 0.02, u1 = M.pts[M.pts.length - 1][0] - 0.02, n = 9, top = Array.from({ length: n }, (_, k) => [u0 + (u1 - u0) * k / (n - 1), 1]);
-  M.stars = M.dual > 0.5 ? [...top, ...top.slice(1, -1).reverse().map(([u]) => [u, -1])] : [[u0, 0], ...top.slice(1, -1), [u1, 0]];
-  M.edges = M.stars.map((_, k) => [k, (k + 1) % M.stars.length]); if (M.dual <= 0.5) M.edges.pop();
-  MOTIFS[id] = Object.assign(M, { song: 'wa', zk: 'wa:' + id.replace('wa_', '') });
+// 和の形（3曲目）：星の家紋。スペクトラムが丸い紋になり、その中の星を線で結ぶと五芒星（晴明桔梗のような「丸に星」）
+{
+  const a = 0.2, circ = u => Math.sqrt(Math.max(0, 1 - ((u - 0.5) / a) ** 2)), rho = 0.78;
+  const pts = Array.from({ length: 33 }, (_, i) => { const u = 0.5 - a + 2 * a * i / 32; return [u, circ(u)]; });
+  const stars = [0, 1, 2, 3, 4].map(k => { const th = Math.PI / 2 + k * 2 * Math.PI / 5, u = 0.5 + a * rho * Math.cos(th), y = rho * Math.sin(th);
+    return [u, y / Math.max(0.05, circ(u))]; });   // 高さは、その位置のシルエットに対する割合
+  MOTIFS.kamon = { n: '星の家紋', dual: 1, bar: 0.9, pts, stars, edges: [[0, 2], [2, 4], [4, 1], [1, 3], [3, 0]], song: 'wa', zk: 'wa:kamon' };
 }
 for (const id in MOTIFS) {   // 形 → 鳴らす音の大きさ（山並みにする変換を逆算）→ 画面に出る形（星の高さに使う）
   const M = MOTIFS[id], xs = M.pts.map(p => p[0]), ys = M.pts.map(p => p[1]);
@@ -1973,7 +1949,7 @@ function motifsOf(loop) {   // その周の「形の音」（ブレイクの最�
   const seq = MOTIF_SEQ[SG.key] || (MOTIF_SEQ[SG.key] = (() => { const r = mulberry(SEED * 17 + 3 + SG.seqOff), q = []; for (let k = 0; k < 40; k++) { const p = shuffle(rest.slice(), r); if (q.length && p[0] === q[q.length - 1]) p.push(p.shift()); q.push(...p); } return q; })());
   const force = FORCE_CONS.filter(k => MOTIFS[k].song === SG.key), h = Math.floor(loop / 2);
   return Object.entries(SG.scenes).map(([b, mb], k) => ({ bar: +b, t: T(mb, 3) + 0.07,
-    id: SG.key === 'fuji' ? 'fuji' : force.length ? force[(loop + k) % force.length] : loop % 2 ? trig[h % trig.length] : seq[h % seq.length] }));
+    id: SG.key === 'fuji' ? 'fuji' : force.length ? force[(loop + k) % force.length] : (!rest.length || loop % 2) ? trig[h % trig.length] : seq[h % seq.length] }));
 }
 // ---------- 1周の目標点。[小節, パート]（曲ごと） ----------
 const WPS = new Map();
@@ -2015,9 +1991,9 @@ function wp(i) {
       W.v = { ...posterV(), yawK: P.v.yawK, rollK: P.v.rollK };
       Object.assign(W.v, STYLES[pick(r, ['bar', 'thin', 'line', 'bar', 'dot'])]);
       const two = M.dual > 0.5;
-      Object.assign(W.v, { dual: M.dual, count: pick(r, [80, 96, 110]), bar: two ? 0.62 : 0.92, cap: two ? 0 : 1, glow: 1, stars: 1, floor: two ? 0 : 1, refl: two ? 0 : 1, grid: two ? 0 : 1, hzOff: two ? 1 : 0, zoom: two ? 1.02 : 1 });
+      Object.assign(W.v, { dual: M.dual, count: pick(r, [80, 96, 110]), bar: M.bar || (two ? 0.62 : 0.92), cap: two ? 0 : 1, glow: 1, stars: 1, floor: two ? 0 : 1, refl: two ? 0 : 1, grid: two ? 0 : 1, hzOff: two ? 1 : 0, zoom: two ? 1.02 : 1 });
       W.bgKind = pick(r, SG.look.bgs); W.bg = BGK[W.bgKind](r);
-      if (!bgDark(W.bg)) { W.bg.cap = SG.key === 'wa' ? '#c8952a' : '#5d6f96'; W.consCol = SG.key === 'wa' ? [0.6, 0.4, 0.08] : [0.2, 0.26, 0.42]; }   // 明るい背景：頂は金箔、線は濃く
+      if (!bgDark(W.bg)) { W.bg.cap = SG.key === 'wa' ? '#c8952a' : '#5d6f96'; if (SG.key !== 'wa') W.consCol = [0.2, 0.26, 0.42]; }   // 明るい背景：頂は金箔（家紋の線は墨の上なので明るい金のまま）
       const pal = W.bgKind === 'paper' && SG.key === 'wa' ? pick(r, [11, 7]) : (p => p === 'sensu' ? P_SENSU : p)(pick(r, SG.look.pals));   // 紙には墨か朱
       W.L = [{ a: 1, p: pal, h: 1, m: 0, ...L0 }, { a: 0, p: 1, h: 1, m: 2, ...L0 }, { a: 0, p: 3, h: 1, m: 1, ...L0 }];
       stagger(W, P, ['color', 'shape', 'coil', 'twist', 'trail', 'fly', 'style', 'layers', 'fx', 'spin', 'split'], r, 0.5, 0.62);
